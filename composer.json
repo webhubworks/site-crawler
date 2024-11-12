@@ -50,5 +50,5 @@
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
-    "bin": ["site-crawler"]
+    "bin": ["builds/site-crawler"]
 }
