@@ -34,7 +34,7 @@ class Crawl extends Command implements PromptsForMissingInput
 
         $this->requestLimit = $this->option('limit');
 
-        $this->queue[] = $this->startUrl;
+        $this->queue[] = ['url' => $this->startUrl, 'foundOn' => null];
 
         $this->excludes = $this->option('exclude') ? explode(',', $this->option('exclude')) : [];
 
@@ -43,6 +43,7 @@ class Crawl extends Command implements PromptsForMissingInput
                 'Status: ' . $stats['status'] ?? 'N/A',
                 $stats['time'] ?? 'N/A',
                 $stats['url'],
+                $stats['foundOn'] ? 'Found on: ' . $stats['foundOn'] : null,
             ]))
         );
 
@@ -61,19 +62,21 @@ class Crawl extends Command implements PromptsForMissingInput
 
         $this->newLine();
         $this->warn('Slowest requests:');
-        $this->table(['URL', 'Status', 'Time'], collect($this->requests)->sortByDesc('time')->take(3)->map(fn ($request) => [
+        $this->table(['URL', 'Status', 'Time', 'First found on'], collect($this->requests)->sortByDesc('time')->take(3)->map(fn ($request) => [
             $request['url'],
             $request['status'] ?? 'N/A',
             $request['time'] ?? 'N/A',
+            $request['foundOn'] ?? 'N/A',
         ]));
 
         if ($failedRequests->isNotEmpty()) {
             $this->warn('Failed requests:');
-            $this->table(['URL', 'Status', 'Time', 'Error'], $failedRequests->map(fn ($request) => [
+            $this->table(['URL', 'Status', 'Time', 'Error', 'First found on'], $failedRequests->map(fn ($request) => [
                 $request['url'],
                 $request['status'] ?? 'N/A',
                 $request['time'] ?? 'N/A',
                 $request['exception'] ?? 'N/A',
+                $request['foundOn'] ?? 'N/A',
             ]));
         }
     }
@@ -83,9 +86,9 @@ class Crawl extends Command implements PromptsForMissingInput
         $count = 0;
 
         while (! empty($this->queue) && $count < $this->requestLimit) {
-            $currentUrl = array_shift($this->queue);
+            $currentUrlSet = array_shift($this->queue);
 
-            if ($this->isAlreadyVisited($currentUrl)) {
+            if ($this->isAlreadyVisited($currentUrlSet['url'])) {
                 continue;
             }
 
@@ -101,12 +104,13 @@ class Crawl extends Command implements PromptsForMissingInput
                     $request = $request->withBasicAuth($user, $password);
                 }
 
-                $response = $request->get((string)$currentUrl);
+                $response = $request->get((string)$currentUrlSet['url']);
 
                 $requestTime = microtime(true) - $start;
 
                 $stats = [
-                    'url' => (string)$currentUrl,
+                    'url' => (string)$currentUrlSet['url'],
+                    'foundOn' => $currentUrlSet['foundOn'],
                     'status' => $response->status(),
                     'success' => $response->successful(),
                     'failed' => $response->failed() || $response->serverError() || $response->clientError(),
@@ -115,7 +119,7 @@ class Crawl extends Command implements PromptsForMissingInput
 
                 $this->requests[] = $stats;
 
-                $this->addToVisited($currentUrl);
+                $this->addToVisited($currentUrlSet['url']);
                 $count++;
 
                 if (is_callable($onAfterFetch)) {
@@ -124,11 +128,12 @@ class Crawl extends Command implements PromptsForMissingInput
 
                 if ($response->successful()) {
                     $links = $this->parseUrlsFromDocumentBody($response->body());
-                    $this->enqueueLinks($links);
+                    $this->enqueueLinks($links, $currentUrlSet['url']);
                 }
             } catch (TooManyRedirectsException $e) {
                 $stats = [
-                    'url' => (string)$currentUrl,
+                    'url' => (string)$currentUrlSet,
+                    'foundOn' => $currentUrlSet['foundOn'],
                     'status' => null,
                     'success' => false,
                     'failed' => true,
@@ -138,7 +143,7 @@ class Crawl extends Command implements PromptsForMissingInput
 
                 $this->requests[] = $stats;
 
-                $this->addToVisited($currentUrl);
+                $this->addToVisited($currentUrlSet['url']);
                 $count++;
 
                 if (is_callable($onAfterFetch)) {
@@ -181,9 +186,10 @@ class Crawl extends Command implements PromptsForMissingInput
             ->toArray();
     }
 
-    private function enqueueLinks(array $urls): void
+    private function enqueueLinks(array $urls, Url $foundOn): void
     {
-        array_push($this->queue, ...$urls);
+        $urlSets = collect($urls)->map(fn (Url $url) => ['url' => $url, 'foundOn' => $foundOn])->toArray();
+        array_push($this->queue, ...$urlSets);
     }
 
     private function normalizeUrl(Url $url): Url
