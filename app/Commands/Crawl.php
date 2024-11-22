@@ -39,12 +39,19 @@ class Crawl extends Command implements PromptsForMissingInput
         $this->excludes = $this->option('exclude') ? explode(',', $this->option('exclude')) : [];
 
         $this->crawl(
-            onAfterFetch: fn (array $stats) => $this->info(implode(', ', [
-                'Status: ' . $stats['status'] ?? 'N/A',
-                $stats['time'] ?? 'N/A',
-                $stats['url'],
-                $stats['foundOn'] ? 'Found on: ' . $stats['foundOn'] : null,
-            ]))
+            onAfterFetch: function (array $stats) {
+                $message = implode(', ', [
+                    'Status: ' . $stats['status'] ?? 'N/A',
+                    $stats['time'] ?? 'N/A',
+                    $stats['url'],
+                    $stats['foundOn'] ? 'Found on: ' . $stats['foundOn'] : null,
+                ]);
+                
+                match ($stats['status']) {
+                    200 => $this->info($message),
+                    default => $this->warn($message),
+                };
+            }
         );
 
         system('clear');
