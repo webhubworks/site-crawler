@@ -46,7 +46,7 @@ class Crawl extends Command implements PromptsForMissingInput
                     $stats['url'],
                     $stats['foundOn'] ? 'Found on: ' . $stats['foundOn'] : null,
                 ]);
-                
+
                 match ($stats['status']) {
                     200 => $this->info($message),
                     default => $this->warn($message),
@@ -69,12 +69,18 @@ class Crawl extends Command implements PromptsForMissingInput
 
         $this->newLine();
         $this->warn('Slowest requests:');
-        $this->table(['URL', 'Status', 'Time', 'First found on'], collect($this->requests)->sortByDesc('time')->take(3)->map(fn ($request) => [
-            $request['url'],
-            $request['status'] ?? 'N/A',
-            $request['time'] ?? 'N/A',
-            $request['foundOn'] ?? 'N/A',
-        ]));
+        $this->table(['URL', 'Status', 'Time', 'First found on'],
+            collect($this->requests)
+                ->sortByDesc('time')
+                ->filter(fn ($request) => $request['status'] === 200)
+                ->take(3)
+                ->map(fn ($request) => [
+                    $request['url'],
+                    $request['status'] ?? 'N/A',
+                    $request['time'] ?? 'N/A',
+                    $request['foundOn'] ?? 'N/A',
+                ])
+        );
 
         if ($failedRequests->isNotEmpty()) {
             $this->warn('Failed requests:');

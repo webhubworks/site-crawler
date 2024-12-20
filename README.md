@@ -7,6 +7,10 @@ Please use this crawler responsibly. Do not use it to crawl websites that you do
 ## Installation
 `composer global require webhubworks/site-crawler`
 
+## Development
+- To run the crawler locally (instead of using the globally installed version): `php site-crawler app:crawl URL`
+- To build the standalone app, run `php site-crawler app:build site-crawler` and specify the next version.
+
 ## Usage
 Use the help: `site-crawler --help`
 
