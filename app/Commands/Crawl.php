@@ -180,6 +180,9 @@ class Crawl extends Command implements PromptsForMissingInput
     {
         $dom = new DOMDocument();
 
+        // Convert the document to UTF-8
+        $body = mb_convert_encoding($body, 'HTML-ENTITIES', 'UTF-8');
+
         // Suppress errors for HTML5 compatibility
         @$dom->loadHTML($body);
 
