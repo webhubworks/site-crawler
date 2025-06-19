@@ -5,6 +5,7 @@ namespace App\Commands;
 use DOMDocument;
 use GuzzleHttp\Exception\TooManyRedirectsException;
 use Illuminate\Contracts\Console\PromptsForMissingInput;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -140,7 +141,7 @@ class Crawl extends Command implements PromptsForMissingInput
                 }
 
                 if ($response->successful()) {
-                    $links = $this->parseUrlsFromDocumentBody($response->body());
+                    $links = $this->parseUrlsFromResponseBody($response);
                     $this->enqueueLinks($links, $currentUrlSet['url']);
                 }
             } catch (TooManyRedirectsException $e) {
@@ -162,6 +163,8 @@ class Crawl extends Command implements PromptsForMissingInput
                 if (is_callable($onAfterFetch)) {
                     $onAfterFetch($stats);
                 }
+            } catch (\Throwable $e) {
+                $this->error($e::class.': '.$e->getMessage().' on '.$currentUrlSet['url']);
             }
         }
     }
@@ -176,22 +179,40 @@ class Crawl extends Command implements PromptsForMissingInput
         $this->visitedUrls[] = $url;
     }
 
-    private function parseUrlsFromDocumentBody(string $body): array
+    private function parseUrlsFromResponseBody(Response $response): array
     {
+        $bodyCharset = explode(
+            'charset=',
+            $response->getHeader('Content-Type')[0] ?? ''
+        )[1] ?? 'UTF-8';
+        
+        $body = $response->body();
+        
+        /**
+         * Convert the document body to `ISO-8859-1` (`Latin-1`) for `DOMDocument::loadHTML()` compatibility.
+         */
+        $body = mb_convert_encoding($body, 'ISO-8859-1', $bodyCharset);
+        
         $dom = new DOMDocument();
-
-        // Convert the document to UTF-8
-        $body = mb_convert_encoding($body, 'HTML-ENTITIES', 'UTF-8');
-
-        // Suppress errors for HTML5 compatibility
+        
+        // Use @ to suppress errors for HTML5 compatibility.
         @$dom->loadHTML($body);
 
         return collect($dom->getElementsByTagName('a'))
             ->transform(fn (?\DOMNode $anchor) => $anchor?->getAttribute('href'))
             ->filter() // Filter empty hrefs
-            ->transform(function (string $href) {
+            ->transform(function (string $href) use ($bodyCharset) {
                 try {
-                    return Url::fromString($href, ['http', 'https']);
+                    /**
+                     * Convert `$href` to `ISO-8859-1` because `parse_url()` expects `ISO-8859-1` encoding.
+                     */
+                    $latin1Href = mb_convert_encoding($href, 'ISO-8859-1', $bodyCharset);
+                    $url = Url::fromString($latin1Href, ['http', 'https']);
+                    
+                    /**
+                     * Convert URL path to `UTF-8` because `Illuminate\Support\Facades\Http::get()` expects `UTF-8` encoding.
+                     */
+                    return $url->withPath(mb_convert_encoding($url->getPath(), 'UTF-8', 'ISO-8859-1'));
                 } catch (InvalidArgument $e) {
                     return null;
                 }
@@ -211,8 +232,8 @@ class Crawl extends Command implements PromptsForMissingInput
     private function normalizeUrl(Url $url): Url
     {
         return $url
-            ->withScheme($url->getScheme() ?? $this->startUrl->getScheme()) // Add default scheme if missing
-            ->withHost($url->getHost() ?? $this->startUrl->getHost()); // Add base domain if missing
+            ->withScheme($url->getScheme() ?? $this->startUrl->getScheme()) // Add the scheme if missing
+            ->withHost($url->getHost() ?? $this->startUrl->getHost()); // Add the base domain if missing
     }
 
     /**
