@@ -193,7 +193,8 @@ class Crawl extends Command implements PromptsForMissingInput
             $response->getHeader('Content-Type')[0] ?? ''
         )[1] ?? 'UTF-8';
 
-        $dom = HTMLDocument::createFromString($response->body(), overrideEncoding: $bodyCharset);
+        // Use @ to suppress warnings when the response body is not valid HTML5.
+        @$dom = HTMLDocument::createFromString($response->body(), overrideEncoding: $bodyCharset);
 
         return collect($dom->getElementsByTagName('a'))
             ->transform(fn (?HTMLElement $anchor) => $anchor?->getAttribute('href'))
