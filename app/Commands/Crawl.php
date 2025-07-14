@@ -2,6 +2,7 @@
 
 namespace App\Commands;
 
+use Dom\Element;
 use Dom\HTMLDocument;
 use Dom\HTMLElement;
 use GuzzleHttp\Exception\TooManyRedirectsException;
@@ -188,6 +189,7 @@ class Crawl extends Command implements PromptsForMissingInput
 
     private function parseUrlsFromResponseBody(Response $response): array
     {
+        // Extract the body's charset from the Content-Type header.
         $bodyCharset = explode(
             'charset=',
             $response->getHeader('Content-Type')[0] ?? ''
@@ -197,7 +199,7 @@ class Crawl extends Command implements PromptsForMissingInput
         @$dom = HTMLDocument::createFromString($response->body(), overrideEncoding: $bodyCharset);
 
         return collect($dom->getElementsByTagName('a'))
-            ->transform(fn (?HTMLElement $anchor) => $anchor?->getAttribute('href'))
+            ->transform(fn (HTMLElement|Element|null $anchor) => $anchor?->getAttribute('href'))
             ->filter() // Filter empty hrefs
             ->transform(function (string $href) use ($bodyCharset) {
                 try {
