@@ -25,7 +25,7 @@ class Crawl extends Command implements PromptsForMissingInput
     private int $requestLimit;
     
     /**
-     * @var array<int, array{url: string, foundOn: string|null}> $queue
+     * @var array<int, array{url: Url, foundOn: string|null}> $queue
      */
     private array $queue = [];
 
