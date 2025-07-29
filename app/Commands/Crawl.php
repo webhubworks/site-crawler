@@ -8,6 +8,7 @@ use Dom\HTMLElement;
 use GuzzleHttp\Exception\TooManyRedirectsException;
 use Illuminate\Contracts\Console\PromptsForMissingInput;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -17,21 +18,39 @@ use Spatie\Url\Url;
 
 class Crawl extends Command implements PromptsForMissingInput
 {
-    protected $signature = 'app:crawl {url} {--limit=250} {--exclude= : Exclude URLs from crawling that contain the following paths, separate by comma} {--basic-auth : user:password (User should not contain colon)}';
+    protected $signature = 'app:crawl {url} {--limit=250} {--exclude= : Exclude URLs from crawling that contain the following paths, separate by comma} {--basic-auth= : user:password (User should not contain colon)}';
 
     protected $description = 'Crawls an entire website on {url} until it reaches {limit}.';
 
     private int $requestLimit;
-
-    private array $queue;
+    
+    /**
+     * @var array<int, array{url: string, foundOn: string|null}> $queue
+     */
+    private array $queue = [];
 
     private array $requests = [];
-
-    private array $visitedUrls = [];
+    
+    /**
+     * @var Collection<int,Url>|null $visitedUrls
+     */
+    private ?Collection $visitedUrls;
 
     private Url $startUrl;
+    
+    /**
+     * @var array{username: string, password: string} $basicAuth
+     */
+    private array $basicAuth = [];
 
     private array $excludes = [];
+    
+    public function __construct()
+    {
+        parent::__construct();
+        
+        $this->visitedUrls = collect();
+    }
 
     public function handle(): void
     {
@@ -46,7 +65,15 @@ class Crawl extends Command implements PromptsForMissingInput
         $this->queue[] = ['url' => $this->startUrl, 'foundOn' => null];
 
         $this->excludes = $this->option('exclude') ? explode(',', $this->option('exclude')) : [];
-
+        
+        if ($this->option('basic-auth')) {
+            [$username, $password] = explode(':', $this->option('basic-auth'), 2);
+            $this->basicAuth = [
+                'username' => $username,
+                'password' => $password
+            ];
+        }
+        
         $this->crawl(
             onAfterFetch: function (array $stats) {
                 $message = implode(', ', [
@@ -60,7 +87,8 @@ class Crawl extends Command implements PromptsForMissingInput
                     200 => $this->info($message),
                     default => $this->warn($message),
                 };
-            }
+            },
+            withBasicAuth: ! empty($this->basicAuth)
         );
 
         system('clear');
@@ -103,7 +131,7 @@ class Crawl extends Command implements PromptsForMissingInput
         }
     }
 
-    public function crawl(?callable $onAfterFetch = null): void
+    public function crawl(?callable $onAfterFetch = null, bool $withBasicAuth = false): void
     {
         $count = 0;
 
@@ -115,21 +143,24 @@ class Crawl extends Command implements PromptsForMissingInput
             }
 
             try {
-                $start = microtime(true);
                 $request = Http::withHeader('x-webhub', 'webhub-site-crawler')
                     ->timeout(15)
                     ->maxRedirects(3)
                     ->retry(3, 200, throw: false);
 
-                if ($this->option('basic-auth')) {
-                    [$user, $password] = explode(':', $this->option('basic-auth'), 2);
-                    $request = $request->withBasicAuth($user, $password);
+                if ($withBasicAuth && !empty($this->basicAuth)) {
+                    $request = $request->withBasicAuth(
+                        $this->basicAuth['username'],
+                        $this->basicAuth['password'],
+                    );
                 }
+
+                $start = microtime(true);
 
                 $response = $request->get((string) $currentUrlSet['url']);
 
                 $requestTime = microtime(true) - $start;
-
+                
                 $stats = [
                     'url' => (string) $currentUrlSet['url'],
                     'foundOn' => $currentUrlSet['foundOn'],
@@ -179,7 +210,7 @@ class Crawl extends Command implements PromptsForMissingInput
 
     private function isAlreadyVisited(Url $url): bool
     {
-        return collect($this->visitedUrls)->contains(fn (Url $visitedUrl) => $visitedUrl->matches($url));
+        return $this->visitedUrls->contains(fn (Url $visitedUrl) => $visitedUrl->matches($url));
     }
 
     private function addToVisited(Url $url): void
@@ -236,7 +267,7 @@ class Crawl extends Command implements PromptsForMissingInput
     }
 
     /**
-     * Should be crawled if it's from the same domain and not already visited
+     * Should be crawled if it's from the same domain and not excluded and not already visited.
      */
     private function shouldCrawl(Url $url): bool
     {
