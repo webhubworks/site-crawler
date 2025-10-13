@@ -23,32 +23,32 @@ class Crawl extends Command implements PromptsForMissingInput
     protected $description = 'Crawls an entire website on {url} until it reaches {limit}.';
 
     private int $requestLimit;
-    
+
     /**
-     * @var array<int, array{url: Url, foundOn: string|null}> $queue
+     * @var array<int, array{url: Url, foundOn: string|null}>
      */
     private array $queue = [];
 
     private array $requests = [];
-    
+
     /**
-     * @var Collection<int,Url>|null $visitedUrls
+     * @var Collection<int,Url>|null
      */
     private ?Collection $visitedUrls;
 
     private Url $startUrl;
-    
+
     /**
-     * @var array{username: string, password: string} $basicAuth
+     * @var array{username: string, password: string}
      */
     private array $basicAuth = [];
 
     private array $excludes = [];
-    
+
     public function __construct()
     {
         parent::__construct();
-        
+
         $this->visitedUrls = collect();
     }
 
@@ -65,15 +65,15 @@ class Crawl extends Command implements PromptsForMissingInput
         $this->queue[] = ['url' => $this->startUrl, 'foundOn' => null];
 
         $this->excludes = $this->option('exclude') ? explode(',', $this->option('exclude')) : [];
-        
+
         if ($this->option('basic-auth')) {
             [$username, $password] = explode(':', $this->option('basic-auth'), 2);
             $this->basicAuth = [
                 'username' => $username,
-                'password' => $password
+                'password' => $password,
             ];
         }
-        
+
         $this->crawl(
             onAfterFetch: function (array $stats) {
                 $message = implode(', ', [
@@ -148,7 +148,7 @@ class Crawl extends Command implements PromptsForMissingInput
                     ->maxRedirects(3)
                     ->retry(3, 200, throw: false);
 
-                if ($withBasicAuth && !empty($this->basicAuth)) {
+                if ($withBasicAuth && ! empty($this->basicAuth)) {
                     $request = $request->withBasicAuth(
                         $this->basicAuth['username'],
                         $this->basicAuth['password'],
@@ -160,7 +160,7 @@ class Crawl extends Command implements PromptsForMissingInput
                 $response = $request->get((string) $currentUrlSet['url']);
 
                 $requestTime = microtime(true) - $start;
-                
+
                 $stats = [
                     'url' => (string) $currentUrlSet['url'],
                     'foundOn' => $currentUrlSet['foundOn'],
