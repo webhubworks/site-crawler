@@ -58,6 +58,8 @@ class CrawlDdev extends Command
 
         if (empty($matches[1])) {
             $this->error('Failed to find a DDEV_PRIMARY_URL inside your ".ddev/.ddev-docker-compose-full.yaml".');
+
+            return false;
         }
 
         return $matches[1];
