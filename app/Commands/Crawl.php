@@ -16,11 +16,17 @@ use Spatie\Url\Url;
 class Crawl extends Command implements PromptsForMissingInput
 {
     protected $signature = 'app:crawl {url} {--limit=250} {--exclude= : Exclude URLs from crawling that contain the following paths, separate by comma} {--basic-auth= : user:password (User should not contain colon)}';
+
     protected $description = 'Crawls an entire website on {url} until it reaches {limit}.';
+
     private int $requestLimit;
+
     private array $queue;
+
     private array $requests = [];
+
     private array $visitedUrls = [];
+
     private Url $startUrl;
 
     private array $excludes = [];
@@ -28,7 +34,7 @@ class Crawl extends Command implements PromptsForMissingInput
     public function handle(): void
     {
         Validator::make($this->arguments(), [
-            'url' => 'required|url'
+            'url' => 'required|url',
         ])->validate();
 
         $this->startUrl = Url::fromString($this->argument('url'));
@@ -42,10 +48,10 @@ class Crawl extends Command implements PromptsForMissingInput
         $this->crawl(
             onAfterFetch: function (array $stats) {
                 $message = implode(', ', [
-                    'Status: ' . $stats['status'] ?? 'N/A',
+                    'Status: '.$stats['status'] ?? 'N/A',
                     $stats['time'] ?? 'N/A',
                     $stats['url'],
-                    $stats['foundOn'] ? 'Found on: ' . $stats['foundOn'] : null,
+                    $stats['foundOn'] ? 'Found on: '.$stats['foundOn'] : null,
                 ]);
 
                 match ($stats['status']) {
@@ -59,14 +65,14 @@ class Crawl extends Command implements PromptsForMissingInput
 
         $failedRequests = collect($this->requests)->where('failed', true);
 
-        $this->info('Crawling completed for ' . $this->startUrl);
+        $this->info('Crawling completed for '.$this->startUrl);
         if (count($this->requests) === $this->option('limit')) {
-            $this->warn('Crawling limit of ' . $this->option('limit') . ' reached.');
+            $this->warn('Crawling limit of '.$this->option('limit').' reached.');
         }
-        $this->info('Total requests: ' . count($this->requests));
-        $this->info('Total successful request: ' . collect($this->requests)->where('success', true)->count());
-        $this->info('Total failed request: ' . $failedRequests->count());
-        $this->info('Average request time: ' . collect($this->requests)->avg('time') . ' seconds');
+        $this->info('Total requests: '.count($this->requests));
+        $this->info('Total successful request: '.collect($this->requests)->where('success', true)->count());
+        $this->info('Total failed request: '.$failedRequests->count());
+        $this->info('Average request time: '.collect($this->requests)->avg('time').' seconds');
 
         $this->newLine();
         $this->warn('Slowest requests:');
@@ -118,17 +124,17 @@ class Crawl extends Command implements PromptsForMissingInput
                     $request = $request->withBasicAuth($user, $password);
                 }
 
-                $response = $request->get((string)$currentUrlSet['url']);
+                $response = $request->get((string) $currentUrlSet['url']);
 
                 $requestTime = microtime(true) - $start;
 
                 $stats = [
-                    'url' => (string)$currentUrlSet['url'],
+                    'url' => (string) $currentUrlSet['url'],
                     'foundOn' => $currentUrlSet['foundOn'],
                     'status' => $response->status(),
                     'success' => $response->successful(),
                     'failed' => $response->failed() || $response->serverError() || $response->clientError(),
-                    'time' => $requestTime
+                    'time' => $requestTime,
                 ];
 
                 $this->requests[] = $stats;
@@ -146,7 +152,7 @@ class Crawl extends Command implements PromptsForMissingInput
                 }
             } catch (TooManyRedirectsException $e) {
                 $stats = [
-                    'url' => (string)$currentUrlSet,
+                    'url' => (string) $currentUrlSet,
                     'foundOn' => $currentUrlSet['foundOn'],
                     'status' => null,
                     'success' => false,
@@ -185,16 +191,16 @@ class Crawl extends Command implements PromptsForMissingInput
             'charset=',
             $response->getHeader('Content-Type')[0] ?? ''
         )[1] ?? 'UTF-8';
-        
+
         $body = $response->body();
-        
+
         /**
          * Convert the document body to `ISO-8859-1` (`Latin-1`) for `DOMDocument::loadHTML()` compatibility.
          */
         $body = mb_convert_encoding($body, 'ISO-8859-1', $bodyCharset);
-        
-        $dom = new DOMDocument();
-        
+
+        $dom = new DOMDocument;
+
         // Use @ to suppress errors for HTML5 compatibility.
         @$dom->loadHTML($body);
 
@@ -208,7 +214,7 @@ class Crawl extends Command implements PromptsForMissingInput
                      */
                     $latin1Href = mb_convert_encoding($href, 'ISO-8859-1', $bodyCharset);
                     $url = Url::fromString($latin1Href, ['http', 'https']);
-                    
+
                     /**
                      * Convert URL path to `UTF-8` because `Illuminate\Support\Facades\Http::get()` expects `UTF-8` encoding.
                      */
@@ -238,9 +244,6 @@ class Crawl extends Command implements PromptsForMissingInput
 
     /**
      * Should be crawled if it's from the same domain and not already visited
-     *
-     * @param Url $url
-     * @return bool
      */
     private function shouldCrawl(Url $url): bool
     {
