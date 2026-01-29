@@ -11,14 +11,14 @@ class CrawlDdev extends Command
      *
      * @var string
      */
-    protected $signature = 'app:crawl-ddev';
+    protected $signature = 'app:crawl-ddev {--l|limit=250 : Only crawl a certain amount of URLs} {--e|exclude= : Exclude URLs from crawling that contain the following paths, separate by comma}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    protected $description = 'Finds the DDEV_PRIMARY_URL inside .ddev/.ddev-docker-compose-full.yaml if that file is accessible from the current working directory. Then runs the app:crawl command with that URL as {url}.';
+    protected $description = 'Finds the DDEV_PRIMARY_URL inside .ddev/.ddev-docker-compose-full.yaml if that file is accessible from the current working directory. Then runs the app:crawl command on that URL passing all received options.';
 
     /**
      * Execute the console command.
@@ -31,7 +31,14 @@ class CrawlDdev extends Command
             return;
         }
 
-        $this->call('app:crawl', ['url' => $url]);
+        $prefixedOptions = collect($this->options())
+            ->mapWithKeys(fn ($value, $key) => ['--'.$key => $value])
+            ->toArray();
+
+        $this->call('app:crawl', [
+            'url' => $url,
+            ...$prefixedOptions
+        ]);
     }
 
     private function getDdevUrl(): string|bool
