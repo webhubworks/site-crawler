@@ -37,7 +37,7 @@ class CrawlDdev extends Command
 
         $this->call('app:crawl', [
             'url' => $url,
-            ...$prefixedOptions
+            ...$prefixedOptions,
         ]);
     }
 
