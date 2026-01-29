@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-01-29
+### Added
+- `app:crawl-ddev` now accepts the `--limit` and `--exclude` options of `app:crawl`.
+- `app:crawl` and `app:crawl-ddev` now accept `-l` as an alias for `--limit`.
+- `app:crawl` and `app:crawl-ddev` now accept `-e` as an alias for `--exclude`.
+
+### Changed
+- Updated command descriptions.
+- Updated dependencies.
+- Removed example tests.
+
 ## [1.2.1] - 2025-10-13
 ### Fixed
 - Fixed an unhandled exception when the `app:crawl-ddev` command failed to find the `DDEV_PRIMARY_URL`.
