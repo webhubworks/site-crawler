@@ -11,7 +11,7 @@ class CrawlDdev extends Command
      *
      * @var string
      */
-    protected $signature = 'app:crawl-ddev {--l|limit=250 : Only crawl a certain amount of URLs} {--e|exclude= : Exclude URLs from crawling that contain the following paths, separate by comma}';
+    protected $signature = 'app:crawl-ddev {--l|limit=250 : Only crawl a certain amount of URLs} {--e|exclude= : Exclude URLs from crawling that contain the following paths, separate by comma} {--m|modes= : Comma-separated list of modes to enable (e.g. cache)}';
 
     /**
      * The console command description.

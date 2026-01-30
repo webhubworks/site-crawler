@@ -18,7 +18,7 @@ use Spatie\Url\Url;
 
 class Crawl extends Command implements PromptsForMissingInput
 {
-    protected $signature = 'app:crawl {url} {--l|limit=250 : Only crawl a certain amount of URLs} {--e|exclude= : Exclude URLs from crawling that contain the following paths, separate by comma} {--basic-auth= : user:password (User should not contain colon)}';
+    protected $signature = 'app:crawl {url} {--l|limit=250 : Only crawl a certain amount of URLs} {--e|exclude= : Exclude URLs from crawling that contain the following paths, separate by comma} {--basic-auth= : user:password (User should not contain colon)} {--m|modes= : Comma-separated list of modes to enable (e.g. cache)}';
 
     protected $description = 'Crawls an entire website starting on {url} until it reaches {limit} excluding URLs that contain any of these strings: {exclude}.';
 
@@ -45,6 +45,8 @@ class Crawl extends Command implements PromptsForMissingInput
 
     private array $excludes = [];
 
+    private array $modes = [];
+
     public function __construct()
     {
         parent::__construct();
@@ -65,6 +67,8 @@ class Crawl extends Command implements PromptsForMissingInput
         $this->queue[] = ['url' => $this->startUrl, 'foundOn' => null];
 
         $this->excludes = $this->option('exclude') ? explode(',', $this->option('exclude')) : [];
+
+        $this->modes = $this->option('modes') ? explode(',', $this->option('modes')) : [];
 
         if ($this->option('basic-auth')) {
             [$username, $password] = explode(':', $this->option('basic-auth'), 2);
@@ -129,6 +133,21 @@ class Crawl extends Command implements PromptsForMissingInput
                 $request['foundOn'] ?? 'N/A',
             ]));
         }
+
+        if ($this->hasCacheMode()) {
+            $this->newLine();
+            $this->info('Cache-Control headers:');
+
+            collect($this->requests)
+                ->whereNotNull('cacheControl')
+                ->groupBy('cacheControl')
+                ->sortKeys()
+                ->each(function (Collection $requests, string $cacheControl) {
+                    $this->newLine();
+                    $this->warn($cacheControl);
+                    $this->table(['URL'], $requests->map(fn (array $request) => [$request['url']]));
+                });
+        }
     }
 
     public function crawl(?callable $onAfterFetch = null, bool $withBasicAuth = false): void
@@ -168,6 +187,7 @@ class Crawl extends Command implements PromptsForMissingInput
                     'success' => $response->successful(),
                     'failed' => $response->failed() || $response->serverError() || $response->clientError(),
                     'time' => $requestTime,
+                    'cacheControl' => $this->hasCacheMode() ? ($response->header('Cache-Control') ?: 'not set') : null,
                 ];
 
                 $this->requests[] = $stats;
@@ -264,6 +284,11 @@ class Crawl extends Command implements PromptsForMissingInput
         return $url
             ->withScheme($url->getScheme() ?? $this->startUrl->getScheme()) // Add the scheme if missing
             ->withHost($url->getHost() ?? $this->startUrl->getHost()); // Add the base domain if missing
+    }
+
+    private function hasCacheMode(): bool
+    {
+        return in_array('cache', $this->modes, true);
     }
 
     /**
