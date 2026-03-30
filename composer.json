@@ -16,7 +16,7 @@
         }
     ],
     "require": {
-        "php": "^8.4",
+        "php": "^8.5",
         "ext-dom": "*",
         "illuminate/http": "^v12.0.0",
         "illuminate/validation": "^12.0.0",
@@ -41,6 +41,9 @@
         }
     },
     "config": {
+        "platform": {
+            "php": "8.5"
+        },
         "preferred-install": "dist",
         "sort-packages": true,
         "optimize-autoloader": true,
