@@ -20,7 +20,7 @@ class CrawlCsv extends Command
     {--basic-auth= : user:password (user must not contain a colon)}
     ';
 
-    protected $description = 'Crawls the URls inside a single CSV column. (For the lack of a better word, "crawl" in this context means the app will make one request per URL in the CSV and NOT use each one as the start point of an autonomous HTML anchor crawling like the basic app:crawl command would.)';
+    protected $description = 'Crawls the URls inside a single CSV column. (For the lack of a better word, "crawl" in this context means the app will make one request per URL in the CSV and NOT use each one as the starting point of a separate website crawling process.)';
 
     private array $requests = [];
 
