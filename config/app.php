@@ -1,5 +1,9 @@
 <?php
 
+use App\Providers\AppServiceProvider;
+use Illuminate\Translation\TranslationServiceProvider;
+use Illuminate\Validation\ValidationServiceProvider;
+
 return [
 
     /*
@@ -54,9 +58,9 @@ return [
     */
 
     'providers' => [
-        App\Providers\AppServiceProvider::class,
-        \Illuminate\Validation\ValidationServiceProvider::class,
-        \Illuminate\Translation\TranslationServiceProvider::class,
+        AppServiceProvider::class,
+        ValidationServiceProvider::class,
+        TranslationServiceProvider::class,
     ],
 
 ];

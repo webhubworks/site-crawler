@@ -31,8 +31,9 @@ class CrawlCsv extends Command
         $urls = $this->extractUrlsFromCsv();
         $totalUrls = $urls->count();
 
-        if(! $this->confirm("Extracted URLs:".PHP_EOL.PHP_EOL.implode(PHP_EOL, $urls->toArray()).PHP_EOL.PHP_EOL."Proceed to crawl $totalUrls URLs?")) {
+        if (! $this->confirm('Extracted URLs:'.PHP_EOL.PHP_EOL.implode(PHP_EOL, $urls->toArray()).PHP_EOL.PHP_EOL."Proceed to crawl $totalUrls URLs?")) {
             $this->warn('Crawling cancelled.');
+
             return;
         }
 
@@ -102,7 +103,7 @@ class CrawlCsv extends Command
         $headerRows = $this->option('header-rows') ?? 0;
         $separator = $this->option('separator') ?? ',';
         $enclosure = $this->option('enclosure') ?? '"';
-        $escape = $this->option('escape') ?? "\\";
+        $escape = $this->option('escape') ?? '\\';
 
         return collect(file($file, FILE_SKIP_EMPTY_LINES))
             ->skip($headerRows)
@@ -110,7 +111,7 @@ class CrawlCsv extends Command
             ->pluck($urlColumn);
     }
 
-    private function makeRequest(String $url, callable $onAfterFetch): void
+    private function makeRequest(string $url, callable $onAfterFetch): void
     {
         try {
             $request = Http::withHeader('x-webhub', 'webhub-site-crawler')
