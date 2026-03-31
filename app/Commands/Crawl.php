@@ -18,7 +18,7 @@ use Spatie\Url\Url;
 
 class Crawl extends Command implements PromptsForMissingInput
 {
-    protected $signature = 'app:crawl {url} {--l|limit=250 : Only crawl a certain amount of URLs} {--e|exclude= : Exclude URLs from crawling that contain the following paths, separate by comma} {--basic-auth= : user:password (User should not contain colon)} {--m|modes= : Comma-separated list of modes to enable (e.g. cache)}';
+    protected $signature = 'app:crawl {url} {--l|limit=250 : Only crawl a certain amount of URLs} {--e|exclude= : Exclude URLs from crawling that contain the following paths, separate by comma} {--basic-auth= : user:password (user must not contain a colon)} {--m|modes= : Comma-separated list of modes to enable (e.g. cache)}';
 
     protected $description = 'Crawls an entire website starting on {url} until it reaches {limit} excluding URLs that contain any of these strings: {exclude}.';
 
