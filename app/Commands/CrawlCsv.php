@@ -10,7 +10,7 @@ use LaravelZero\Framework\Commands\Command;
 class CrawlCsv extends Command
 {
     public $signature = '
-    app:crawl-csv
+    crawl:csv
     {file : The path to the CSV file on the system.}
     {--c|url-column=1 : The index1 of the column containing the URLs to crawl.}
     {--H|header-rows=0 : The number of header rows to skip.}
