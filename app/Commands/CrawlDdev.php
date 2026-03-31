@@ -28,7 +28,6 @@ class CrawlDdev extends Command
         $url = $this->getDdevUrl();
 
         if (! $url) {
-            $this->error('Failed to find the DDEV_PRIMARY_URL inside your project.');
             return;
         }
 
