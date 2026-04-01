@@ -35,7 +35,7 @@ class CrawlDdev extends Command
             ->mapWithKeys(fn ($value, $key) => ['--'.$key => $value])
             ->toArray();
 
-        $this->call('app:crawl', [
+        $this->call('crawl:url', [
             'url' => $url,
             ...$prefixedOptions,
         ]);
