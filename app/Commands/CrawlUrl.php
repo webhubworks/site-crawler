@@ -300,8 +300,13 @@ class CrawlUrl extends Command implements PromptsForMissingInput
             return false;
         }
 
-        foreach ($this->excludes as $exclude) {
-            if (Str::contains($url->getPath(), $exclude)) {
+        if (! empty($this->excludes)) {
+            if (Str::contains($url->getPath(), $this->excludes)) {
+                return false;
+            }
+
+            $queryParameters = $url->getAllQueryParameters();
+            if (array_any($this->excludes, fn($exclude) => isset($queryParameters[$exclude]))) {
                 return false;
             }
         }
