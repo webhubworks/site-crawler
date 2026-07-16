@@ -6,3 +6,4 @@
 /app/Commands/Debug.php
 /.ddev
 /storage
+/builds

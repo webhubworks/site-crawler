@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.1] - 2026-07-16
+### Changed
+- The globally installed command now runs the package source directly instead of a prebuilt phar (the `bin` points to the `site-crawler` entry script). Releasing no longer requires a build step - a new version ships by pushing a git tag.
+
 ## [3.2.0] - 2026-07-16
 ### Added
 - The `crawl:url` and `crawl:ddev` commands now crawl in parallel. A new `--concurrency` (`-c`) option (default `10`) controls how many URLs are fetched concurrently per wave.

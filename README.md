@@ -9,8 +9,10 @@ Run `composer global require webhubworks/site-crawler -W` in your terminal.
 After that, running `site-crawler` should output the version and command list.
 
 ## Development
-- To run the crawler locally (instead of using the globally installed version): `php site-crawler app:crawl URL`
-- To build the standalone app, run `php site-crawler app:build site-crawler` and specify the next version.
+- To run the crawler locally (instead of using the globally installed version): `php site-crawler crawl:url URL`
+
+## Releasing
+The globally installed command runs this package's source directly (the `bin` is the `site-crawler` entry script), so there is no build step. To release a new version, update the `CHANGELOG.md`, commit, and push a matching git tag (e.g. `3.2.1`). Users update with `composer global update webhubworks/site-crawler`.
 
 ## Usage
 Run `site-crawler` to get a list of all available crawling commands.
