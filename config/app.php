@@ -30,7 +30,20 @@ return [
     |
     */
 
-    'version' => app('git.version'),
+    'version' => (function () {
+        // When installed as a Composer package (e.g. via `composer global require`),
+        // report the installed package version. Fall back to the git tag for local
+        // development, where the package resolves to a "dev-*" reference.
+        if (\Composer\InstalledVersions::isInstalled('webhubworks/site-crawler')) {
+            $installed = \Composer\InstalledVersions::getPrettyVersion('webhubworks/site-crawler');
+
+            if ($installed !== null && ! str_starts_with($installed, 'dev-')) {
+                return ltrim($installed, 'v');
+            }
+        }
+
+        return app('git.version');
+    })(),
 
     /*
     |--------------------------------------------------------------------------

@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.2.0] - 2026-07-16
 ### Added
-- The `crawl:url` and `crawl:ddev` commands now crawl in parallel. A new `--concurrency` (`-c`) option (default `10`) controls how many URLs are fetched concurrently per wave.
+- The `crawl:url` and `crawl:ddev` commands can now crawl in parallel via a new `--concurrency` (`-c`) option that sets how many URLs are fetched concurrently per wave. It defaults to `1` (sequential); pass a higher value to opt into parallel crawling.
 
 ### Changed
 - Per-request timing now uses the actual transfer time reported by the HTTP client, so the "slowest requests" report stays accurate under concurrent crawling.

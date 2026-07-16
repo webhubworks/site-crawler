@@ -19,7 +19,7 @@ Run `site-crawler` to get a list of all available crawling commands.
 
 Example: `site-crawler crawl:url https://example.com --limit=50 --concurrency=10 --basic-auth=user:pass --exclude=action,imprint`
 
-The `--concurrency` option (default `10`) controls how many URLs are crawled in parallel per wave. Newly discovered links are gathered wave by wave, so each batch of concurrent requests feeds the next.
+Crawling is sequential by default (`--concurrency=1`). Pass a higher `--concurrency` to crawl multiple URLs in parallel per wave; newly discovered links are gathered wave by wave, so each batch of concurrent requests feeds the next. Note that parallel crawling only speeds things up when the target server actually handles requests concurrently - a local dev server with a single worker will process them one at a time regardless.
 
 ## Roadmap
 - [ ] Add support for websites containing links in JS generated markup
