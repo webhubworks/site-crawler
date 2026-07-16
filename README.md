@@ -15,8 +15,10 @@ After that, running `site-crawler` should output the version and command list.
 ## Usage
 Run `site-crawler` to get a list of all available crawling commands.
 
-Example: `site-crawler crawl:url https://example.com --limit=50 --basic-auth=user:pass --exclude=action,imprint`
+Example: `site-crawler crawl:url https://example.com --limit=50 --concurrency=10 --basic-auth=user:pass --exclude=action,imprint`
+
+The `--concurrency` option (default `10`) controls how many URLs are crawled in parallel per wave. Newly discovered links are gathered wave by wave, so each batch of concurrent requests feeds the next.
 
 ## Roadmap
 - [ ] Add support for websites containing links in JS generated markup
-- [ ] Run requests in parallel
+- [x] Run requests in parallel

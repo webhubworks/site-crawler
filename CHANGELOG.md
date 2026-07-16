@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-07-16
+### Added
+- The `crawl:url` and `crawl:ddev` commands now crawl in parallel. A new `--concurrency` (`-c`) option (default `10`) controls how many URLs are fetched concurrently per wave.
+
+### Changed
+- Per-request timing now uses the actual transfer time reported by the HTTP client, so the "slowest requests" report stays accurate under concurrent crawling.
+
 ## [3.1.4] - 2026-07-09
 ### Fixed
 - Updated the contents of the README to reflect the new command signatures.

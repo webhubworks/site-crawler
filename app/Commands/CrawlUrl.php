@@ -5,8 +5,8 @@ namespace App\Commands;
 use Dom\Element;
 use Dom\HTMLDocument;
 use Dom\HTMLElement;
-use GuzzleHttp\Exception\TooManyRedirectsException;
 use Illuminate\Contracts\Console\PromptsForMissingInput;
+use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
@@ -18,11 +18,13 @@ use Spatie\Url\Url;
 
 class CrawlUrl extends Command implements PromptsForMissingInput
 {
-    protected $signature = 'crawl:url {url} {--l|limit=250 : Only crawl a certain amount of URLs} {--e|exclude= : Exclude URLs from crawling that contain the following paths, separate by comma} {--basic-auth= : user:password (user must not contain a colon)} {--m|modes= : Comma-separated list of modes to enable (e.g. cache)}';
+    protected $signature = 'crawl:url {url} {--l|limit=250 : Only crawl a certain amount of URLs} {--c|concurrency=10 : Number of URLs to crawl in parallel per wave} {--e|exclude= : Exclude URLs from crawling that contain the following paths, separate by comma} {--basic-auth= : user:password (user must not contain a colon)} {--m|modes= : Comma-separated list of modes to enable (e.g. cache)}';
 
     protected $description = 'Crawls an entire website starting on {url} until it reaches {limit} excluding URLs that contain any of these strings: {exclude}.';
 
     private int $requestLimit;
+
+    private int $concurrency;
 
     /**
      * @var array<int, array{url: Url, foundOn: string|null}>
@@ -62,7 +64,9 @@ class CrawlUrl extends Command implements PromptsForMissingInput
 
         $this->startUrl = Url::fromString($this->argument('url'));
 
-        $this->requestLimit = $this->option('limit');
+        $this->requestLimit = (int) $this->option('limit');
+
+        $this->concurrency = max(1, (int) $this->option('concurrency'));
 
         $this->queue[] = ['url' => $this->startUrl, 'foundOn' => null];
 
@@ -155,77 +159,107 @@ class CrawlUrl extends Command implements PromptsForMissingInput
         $count = 0;
 
         while (! empty($this->queue) && $count < $this->requestLimit) {
-            $currentUrlSet = array_shift($this->queue);
+            /**
+             * Pull the next wave of URLs. New links discovered while crawling are
+             * appended to the queue below, so each wave feeds the next one.
+             */
+            $batch = $this->takeBatch(min($this->concurrency, $this->requestLimit - $count));
 
-            if ($this->isAlreadyVisited($currentUrlSet['url'])) {
+            if (empty($batch)) {
                 continue;
             }
 
-            try {
-                $request = Http::withHeader('x-webhub', 'webhub-site-crawler')
-                    ->timeout(15)
-                    ->maxRedirects(3)
-                    ->retry(3, 200, throw: false);
+            $responses = Http::pool(fn (Pool $pool) => collect($batch)
+                ->map(function (array $urlSet, int $key) use ($pool, $withBasicAuth) {
+                    $request = $pool->as((string) $key)
+                        ->withHeader('x-webhub', 'webhub-site-crawler')
+                        ->timeout(15)
+                        ->maxRedirects(3)
+                        ->retry(3, 200, throw: false);
 
-                if ($withBasicAuth && ! empty($this->basicAuth)) {
-                    $request = $request->withBasicAuth(
-                        $this->basicAuth['username'],
-                        $this->basicAuth['password'],
-                    );
+                    if ($withBasicAuth && ! empty($this->basicAuth)) {
+                        $request = $request->withBasicAuth(
+                            $this->basicAuth['username'],
+                            $this->basicAuth['password'],
+                        );
+                    }
+
+                    return $request->get((string) $urlSet['url']);
+                })
+                ->all());
+
+            foreach ($batch as $key => $urlSet) {
+                $result = $responses[(string) $key] ?? null;
+                $count++;
+
+                if (! $result instanceof Response) {
+                    $stats = [
+                        'url' => (string) $urlSet['url'],
+                        'foundOn' => $urlSet['foundOn'],
+                        'status' => null,
+                        'success' => false,
+                        'failed' => true,
+                        'time' => null,
+                        'exception' => $result instanceof \Throwable ? $result->getMessage() : 'Unknown error',
+                    ];
+
+                    $this->requests[] = $stats;
+
+                    if (is_callable($onAfterFetch)) {
+                        $onAfterFetch($stats);
+                    }
+
+                    continue;
                 }
 
-                $start = microtime(true);
-
-                $response = $request->get((string) $currentUrlSet['url']);
-
-                $requestTime = microtime(true) - $start;
-
                 $stats = [
-                    'url' => (string) $currentUrlSet['url'],
-                    'foundOn' => $currentUrlSet['foundOn'],
-                    'status' => $response->status(),
-                    'success' => $response->successful(),
-                    'failed' => $response->failed() || $response->serverError() || $response->clientError(),
-                    'time' => $requestTime,
-                    'cacheControl' => $this->hasCacheMode() ? ($response->header('Cache-Control') ?: 'not set') : null,
+                    'url' => (string) $urlSet['url'],
+                    'foundOn' => $urlSet['foundOn'],
+                    'status' => $result->status(),
+                    'success' => $result->successful(),
+                    'failed' => $result->failed() || $result->serverError() || $result->clientError(),
+                    'time' => $result->transferStats?->getTransferTime(),
+                    'cacheControl' => $this->hasCacheMode() ? ($result->header('Cache-Control') ?: 'not set') : null,
                 ];
 
                 $this->requests[] = $stats;
-
-                $this->addToVisited($currentUrlSet['url']);
-                $count++;
 
                 if (is_callable($onAfterFetch)) {
                     $onAfterFetch($stats);
                 }
 
-                if ($response->successful()) {
-                    $links = $this->parseUrlsFromResponseBody($response);
-                    $this->enqueueLinks($links, $currentUrlSet['url']);
+                if ($result->successful()) {
+                    $links = $this->parseUrlsFromResponseBody($result);
+                    $this->enqueueLinks($links, $urlSet['url']);
                 }
-            } catch (TooManyRedirectsException $e) {
-                $stats = [
-                    'url' => (string) $currentUrlSet,
-                    'foundOn' => $currentUrlSet['foundOn'],
-                    'status' => null,
-                    'success' => false,
-                    'failed' => true,
-                    'time' => null,
-                    'exception' => $e->getMessage(),
-                ];
-
-                $this->requests[] = $stats;
-
-                $this->addToVisited($currentUrlSet['url']);
-                $count++;
-
-                if (is_callable($onAfterFetch)) {
-                    $onAfterFetch($stats);
-                }
-            } catch (\Throwable $e) {
-                $this->error($e::class.' with message '.$e->getMessage().' on '.$currentUrlSet['url']);
             }
         }
+    }
+
+    /**
+     * Take up to $max unvisited URLs off the queue for the next concurrent wave.
+     *
+     * URLs are marked visited the moment they are reserved (before dispatch) so
+     * the same URL is never fetched twice within or across concurrent waves.
+     *
+     * @return array<int, array{url: Url, foundOn: string|null}>
+     */
+    private function takeBatch(int $max): array
+    {
+        $batch = [];
+
+        while (count($batch) < $max && ! empty($this->queue)) {
+            $urlSet = array_shift($this->queue);
+
+            if ($this->isAlreadyVisited($urlSet['url'])) {
+                continue;
+            }
+
+            $this->addToVisited($urlSet['url']);
+            $batch[] = $urlSet;
+        }
+
+        return $batch;
     }
 
     private function isAlreadyVisited(Url $url): bool
@@ -306,7 +340,7 @@ class CrawlUrl extends Command implements PromptsForMissingInput
             }
 
             $queryParameters = $url->getAllQueryParameters();
-            if (array_any($this->excludes, fn($exclude) => isset($queryParameters[$exclude]))) {
+            if (array_any($this->excludes, fn ($exclude) => isset($queryParameters[$exclude]))) {
                 return false;
             }
         }
