@@ -1,6 +1,6 @@
 <?php
 
-use App\Providers\AppServiceProvider;
+use SiteCrawler\Providers\AppServiceProvider;
 
 return [
     AppServiceProvider::class,

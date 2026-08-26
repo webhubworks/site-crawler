@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Providers;
+namespace SiteCrawler\Providers;
 
 use Illuminate\Support\ServiceProvider;
 

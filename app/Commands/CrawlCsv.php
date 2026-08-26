@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Commands;
+namespace SiteCrawler\Commands;
 
 use GuzzleHttp\Exception\TooManyRedirectsException;
 use Illuminate\Support\Collection;

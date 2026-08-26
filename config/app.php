@@ -1,6 +1,6 @@
 <?php
 
-use App\Providers\AppServiceProvider;
+use SiteCrawler\Providers\AppServiceProvider;
 use Illuminate\Translation\TranslationServiceProvider;
 use Illuminate\Validation\ValidationServiceProvider;
 

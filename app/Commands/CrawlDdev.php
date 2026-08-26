@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Commands;
+namespace SiteCrawler\Commands;
 
 use LaravelZero\Framework\Commands\Command;
 
