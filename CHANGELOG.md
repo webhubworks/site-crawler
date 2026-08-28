@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
-## [3.3.0] - 2026-08-26
+## [3.3.0] - 2026-08-28
 ### Added
 - Added the `-o`|`--output` option to all `crawl:*` commands to write the results into a `CSV` file.
 - Added the `-y`|`--yes` option to the `crawl:csv` command to skip the confirmation prompt.
