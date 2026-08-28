@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed 
 - Fixed the `-l`|`--limit` option of the `crawl:url` and `crawl:ddev` not working as intended.
+- Fixed the `crawl:url` and `crawl:ddev` commands silently skipping relative links. Relative links are now resolved against the page they were found on.
+- Fixed `#anchor` links being crawled as separate URLs.
 
 ## [3.2.4] - 2026-08-26
 ### Fixed

@@ -1,8 +1,9 @@
 <?php
 
-use SiteCrawler\Providers\AppServiceProvider;
+use Composer\InstalledVersions;
 use Illuminate\Translation\TranslationServiceProvider;
 use Illuminate\Validation\ValidationServiceProvider;
+use SiteCrawler\Providers\AppServiceProvider;
 
 return [
 
@@ -34,8 +35,8 @@ return [
         // When installed as a Composer package (e.g. via `composer global require`),
         // report the installed package version. Fall back to the git tag for local
         // development, where the package resolves to a "dev-*" reference.
-        if (\Composer\InstalledVersions::isInstalled('webhubworks/site-crawler')) {
-            $installed = \Composer\InstalledVersions::getPrettyVersion('webhubworks/site-crawler');
+        if (InstalledVersions::isInstalled('webhubworks/site-crawler')) {
+            $installed = InstalledVersions::getPrettyVersion('webhubworks/site-crawler');
 
             if ($installed !== null && ! str_starts_with($installed, 'dev-')) {
                 return ltrim($installed, 'v');

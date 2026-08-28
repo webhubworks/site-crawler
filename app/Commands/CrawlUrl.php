@@ -5,6 +5,8 @@ namespace SiteCrawler\Commands;
 use Dom\Element;
 use Dom\HTMLDocument;
 use Dom\HTMLElement;
+use GuzzleHttp\Psr7\Uri;
+use GuzzleHttp\Psr7\UriResolver;
 use Illuminate\Contracts\Console\PromptsForMissingInput;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
@@ -12,8 +14,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 use SiteCrawler\Console\CrawlCommand;
-use Spatie\Url\Exceptions\InvalidArgument;
 use Spatie\Url\Url;
 
 class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
@@ -162,7 +164,7 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
                 ]);
 
                 if ($result->successful()) {
-                    $links = $this->parseUrlsFromResponseBody($result);
+                    $links = $this->parseUrlsFromResponseBody($result, $this->effectiveUrl($result, $urlSet['url']));
                     $this->enqueueLinks($links, $urlSet['url']);
                 }
             }
@@ -282,7 +284,7 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
         $this->visitedUrls[] = $url;
     }
 
-    private function parseUrlsFromResponseBody(Response $response): array
+    private function parseUrlsFromResponseBody(Response $response, Url $pageUrl): array
     {
         // Extract the body's charset from the Content-Type header.
         $bodyCharset = explode(
@@ -293,41 +295,84 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
         // Use @ to suppress warnings when the response body is not valid HTML5.
         @$dom = HTMLDocument::createFromString($response->body(), overrideEncoding: $bodyCharset);
 
+        $baseUrl = $this->resolveBaseUrl($dom, $pageUrl);
+
         return collect($dom->getElementsByTagName('a'))
             ->transform(fn (HTMLElement|Element|null $anchor) => $anchor?->getAttribute('href'))
             ->filter() // Filter empty hrefs
-            ->transform(function (string $href) use ($bodyCharset) {
+            ->transform(function (string $href) use ($bodyCharset, $baseUrl) {
                 try {
                     /**
                      * Convert `$href` encoding to `ISO-8859-1` (`Latin-1`) because `parse_url()` expects that.
                      */
-                    $url = Url::fromString(mb_convert_encoding($href, 'ISO-8859-1', $bodyCharset), ['http', 'https']);
+                    $url = $this->resolveUrl($baseUrl, mb_convert_encoding($href, 'ISO-8859-1', $bodyCharset));
 
                     /**
                      * Convert the URL paths encoding to `UTF-8` because `Illuminate\Support\Facades\Http::get()` expects that.
                      */
                     return $url->withPath(mb_convert_encoding($url->getPath(), 'UTF-8', 'ISO-8859-1'));
-                } catch (InvalidArgument $e) {
+                } catch (InvalidArgumentException $e) {
                     return null;
                 }
             })
             ->filter() // Filter empty hrefs
-            ->transform(fn (Url $url) => $this->normalizeUrl($url))
             ->filter(fn (Url $url) => $this->shouldCrawl($url))
             ->toArray();
+    }
+
+    /**
+     * The URL the response actually came from, which is what relative links on the page
+     * resolve against once a redirect has been followed.
+     */
+    private function effectiveUrl(Response $response, Url $requestedUrl): Url
+    {
+        $effectiveUri = $response->transferStats?->getEffectiveUri();
+
+        return $effectiveUri ? Url::fromString((string) $effectiveUri) : $requestedUrl;
+    }
+
+    /**
+     * Relative links resolve against a `<base href>` when the document declares one,
+     * and against the page's own URL otherwise.
+     */
+    private function resolveBaseUrl(HTMLDocument $dom, Url $pageUrl): Url
+    {
+        $baseHref = $dom->getElementsByTagName('base')->item(0)?->getAttribute('href');
+
+        if (! $baseHref) {
+            return $pageUrl;
+        }
+
+        try {
+            return $this->resolveUrl($pageUrl, $baseHref);
+        } catch (InvalidArgumentException $e) {
+            return $pageUrl;
+        }
+    }
+
+    /**
+     * Turn an href into an absolute URL by resolving it against the page it was found on
+     * (RFC 3986), so `/about`, `about`, `../top` and `//cdn.example.com/x` all work.
+     *
+     * The href is parsed with Guzzle's Uri rather than Spatie's Url because Spatie rewrites
+     * an empty path to `/`, and an empty path is exactly what marks a reference as query
+     * only (`?page=2`) or fragment only (`#section`).
+     *
+     * The fragment is dropped because `#section` links point at the document itself and
+     * would otherwise be crawled once per anchor. Building the result through
+     * `Url::fromString()` keeps the scheme check that filters `mailto:`, `tel:` and friends.
+     */
+    private function resolveUrl(Url $baseUrl, string $href): Url
+    {
+        $resolved = UriResolver::resolve($baseUrl, new Uri($href))->withFragment('');
+
+        return Url::fromString((string) $resolved, ['http', 'https']);
     }
 
     private function enqueueLinks(array $urls, Url $foundOn): void
     {
         $urlSets = collect($urls)->map(fn (Url $url) => ['url' => $url, 'foundOn' => $foundOn])->toArray();
         array_push($this->queue, ...$urlSets);
-    }
-
-    private function normalizeUrl(Url $url): Url
-    {
-        return $url
-            ->withScheme($url->getScheme() ?? $this->startUrl->getScheme()) // Add the scheme if missing
-            ->withHost($url->getHost() ?? $this->startUrl->getHost()); // Add the base domain if missing
     }
 
     private function hasCacheMode(): bool
