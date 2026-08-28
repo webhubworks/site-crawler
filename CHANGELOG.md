@@ -6,8 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [3.4.0] - 2026-08-28
-- Added the `-r`|`--redirects` option to all `crawl:*` commands to set how many redirects are followed per URL. Defaults to 3 as before. Use 0 to not follow redirects at all and report the `3XX` response itself.
+### Added
+- Added the `-c`|`--concurrency` option to the `crawl:csv` command aswell.
+- Added the `-p`|`--parallel` option as an alias of `-c`|`--concurrency` to all commands.
+- Added the `-r`|`--redirects` option to all commands to set how many redirects are followed per URL.
 - Added the number of followed redirects and the final URL to the terminal output and to the `redirects` and `final_url` columns of the `CSV` output, to make a redirected URL distinguishable from a direct hit.
+
+### Changed
+- Changed the `-c`|`--url-column` option of the `crawl:csv` command to `-C`|`--column`.
+- Changed an invalid `-c`|`--concurrency` input to abort execution instead of defaulting to 1.
 
 ## [3.3.1] - 2026-08-28
 ### Fixed

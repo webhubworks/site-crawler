@@ -8,10 +8,8 @@ use Dom\HTMLElement;
 use GuzzleHttp\Psr7\Uri;
 use GuzzleHttp\Psr7\UriResolver;
 use Illuminate\Contracts\Console\PromptsForMissingInput;
-use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -25,15 +23,12 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
      * this command. The options every crawl command takes live on CrawlCommand.
      */
     public static string $options = '{--l|limit=250 : Only crawl a certain amount of URLs}'
-        .'{--c|concurrency=1 : Number of URLs to crawl in parallel per wave (1 = sequential, the default)}'
         .'{--e|exclude= : Exclude URLs from crawling that contain the following paths, separate by comma}'
         .'{--m|modes= : Comma-separated list of modes to enable (e.g. cache)}';
 
     protected $description = 'Crawls an entire website starting on {url} until it reaches {limit} excluding URLs that contain any of these strings: {exclude}.';
 
     private int $requestLimit;
-
-    private int $concurrency;
 
     /**
      * @var array<int, array{url: Url, foundOn: string|null}>
@@ -70,8 +65,6 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
 
         $this->requestLimit = (int) $this->option('limit');
 
-        $this->concurrency = max(1, (int) $this->option('concurrency'));
-
         $this->queue[] = ['url' => $this->startUrl, 'foundOn' => null];
 
         $this->excludes = $this->option('exclude') ? explode(',', $this->option('exclude')) : [];
@@ -80,7 +73,7 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
 
         $this->resolveBasicAuth();
 
-        if (! $this->resolveRedirectLimit()) {
+        if (! $this->resolveConcurrency() || ! $this->resolveRedirectLimit()) {
             return self::FAILURE;
         }
 
@@ -94,7 +87,7 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
             return self::FAILURE;
         }
 
-        $this->crawl(withBasicAuth: ! empty($this->basicAuth));
+        $this->crawl();
 
         $this->renderSummary();
 
@@ -105,7 +98,7 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
         return self::SUCCESS;
     }
 
-    public function crawl(bool $withBasicAuth = false): void
+    public function crawl(): void
     {
         $count = 0;
 
@@ -120,56 +113,27 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
                 continue;
             }
 
-            $responses = Http::pool(fn (Pool $pool) => collect($batch)
-                ->map(function (array $urlSet, int $key) use ($pool, $withBasicAuth) {
-                    $request = $pool->as((string) $key)
-                        ->withHeader('x-webhub', 'webhub-site-crawler')
-                        ->timeout(15)
-                        ->maxRedirects($this->redirectLimit)
-                        ->withOptions(['allow_redirects' => ['track_redirects' => true]])
-                        ->retry(3, 200, throw: false);
-
-                    if ($withBasicAuth && ! empty($this->basicAuth)) {
-                        $request = $request->withBasicAuth(
-                            $this->basicAuth['username'],
-                            $this->basicAuth['password'],
-                        );
-                    }
-
-                    return $request->get((string) $urlSet['url']);
-                })
-                ->all());
+            $responses = $this->sendBatch(
+                collect($batch)->map(fn (array $urlSet) => (string) $urlSet['url'])->all()
+            );
 
             foreach ($batch as $key => $urlSet) {
                 $result = $responses[(string) $key] ?? null;
                 $count++;
 
-                if (! $result instanceof Response) {
-                    $this->recordRequest([
-                        'url' => (string) $urlSet['url'],
-                        'foundOn' => $urlSet['foundOn'],
-                        'status' => null,
-                        'success' => false,
-                        'failed' => true,
-                        'time' => null,
-                        'exception' => $result instanceof \Throwable ? $result->getMessage() : 'Unknown error',
-                    ]);
+                $stats = $this->statsFor(
+                    (string) $urlSet['url'],
+                    $result,
+                    ['foundOn' => $urlSet['foundOn']],
+                );
 
-                    continue;
+                if ($result instanceof Response && $this->hasCacheMode()) {
+                    $stats['cacheControl'] = $result->header('Cache-Control') ?: 'not set';
                 }
 
-                $this->recordRequest([
-                    'url' => (string) $urlSet['url'],
-                    'foundOn' => $urlSet['foundOn'],
-                    'status' => $result->status(),
-                    'success' => $result->successful(),
-                    'failed' => $result->failed() || $result->serverError() || $result->clientError(),
-                    'time' => $result->transferStats?->getTransferTime(),
-                    'cacheControl' => $this->hasCacheMode() ? ($result->header('Cache-Control') ?: 'not set') : null,
-                    ...$this->redirectStats($result),
-                ]);
+                $this->recordRequest($stats);
 
-                if ($result->successful()) {
+                if ($result instanceof Response && $result->successful()) {
                     $links = $this->parseUrlsFromResponseBody($result, $this->effectiveUrl($result, $urlSet['url']));
                     $this->enqueueLinks($links, $urlSet['url']);
                 }

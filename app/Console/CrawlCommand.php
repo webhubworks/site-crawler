@@ -2,8 +2,10 @@
 
 namespace SiteCrawler\Console;
 
+use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use LaravelZero\Framework\Commands\Command;
 
@@ -14,6 +16,9 @@ abstract class CrawlCommand extends Command
      * appended to a command's signature through sharedOptions().
      */
     public static string $basicAuthOption = '{--basic-auth= : user:password (user must not contain a colon)}';
+
+    public static string $concurrencyOption = '{--c|concurrency=1 : Number of URLs to crawl in parallel per wave (1 = sequential, the default)}'
+        .'{--p|parallel= : Alias of --concurrency.}';
 
     public static string $redirectsOption = '{--r|redirects=3 : Maximum number of redirects to follow per URL. Use 0 to not follow redirects at all and report the 3xx response itself.}';
 
@@ -31,6 +36,8 @@ abstract class CrawlCommand extends Command
 
     protected int $redirectLimit = 3;
 
+    protected int $concurrency = 1;
+
     /**
      * @var array{username: string, password: string}|array{}
      */
@@ -41,7 +48,7 @@ abstract class CrawlCommand extends Command
      */
     public static function sharedOptions(): string
     {
-        return self::$basicAuthOption.self::$redirectsOption.self::$outputOption;
+        return self::$concurrencyOption.self::$basicAuthOption.self::$redirectsOption.self::$outputOption;
     }
 
     /**
@@ -60,6 +67,101 @@ abstract class CrawlCommand extends Command
      * @return array<string, string>
      */
     abstract protected function csvColumns(): array;
+
+    /**
+     * Validate --concurrency (or its --parallel alias) and remember the wave size.
+     */
+    protected function resolveConcurrency(): bool
+    {
+        /**
+         * --parallel is an alias, so it only counts when it was actually passed. Symfony has
+         * no long name aliases, hence the second option deferring to the first.
+         */
+        $usesAlias = $this->input->hasParameterOption(['--parallel', '-p'], true);
+
+        $value = $usesAlias ? $this->option('parallel') : $this->option('concurrency');
+        $name = $usesAlias ? '--parallel' : '--concurrency';
+
+        if ($value === null) {
+            $this->error('The '.$name.' option requires a value, e.g. '.$name.'=10.');
+
+            return false;
+        }
+
+        if (! ctype_digit((string) $value) || (int) $value < 1) {
+            $this->error('The '.$name.' option must be a whole number of 1 or more, got "'.$value.'".');
+
+            return false;
+        }
+
+        $this->concurrency = (int) $value;
+
+        return true;
+    }
+
+    /**
+     * Send one wave of URLs in parallel.
+     *
+     * Every crawl command shares this so a request is always configured the same way, and
+     * so a transport failure is always handled the same way: Http::pool() returns the
+     * exception rather than throwing it, which is easy to drop on the floor by accident.
+     *
+     * @param  array<int|string, string>  $urls
+     * @return array<string, Response|\Throwable>
+     */
+    protected function sendBatch(array $urls): array
+    {
+        return Http::pool(fn (Pool $pool) => collect($urls)
+            ->map(function (string $url, int|string $key) use ($pool) {
+                $request = $pool->as((string) $key)
+                    ->withHeader('x-webhub', 'webhub-site-crawler')
+                    ->timeout(15)
+                    ->maxRedirects($this->redirectLimit)
+                    ->withOptions(['allow_redirects' => ['track_redirects' => true]])
+                    ->retry(3, 200, throw: false);
+
+                if (! empty($this->basicAuth)) {
+                    $request = $request->withBasicAuth(
+                        $this->basicAuth['username'],
+                        $this->basicAuth['password'],
+                    );
+                }
+
+                return $request->get($url);
+            })
+            ->all());
+    }
+
+    /**
+     * Build the recorded stats for one pooled result, whether it came back as a response or
+     * as the exception of a request that never produced one.
+     *
+     * @param  array<string, mixed>  $extra  command specific fields, e.g. where a URL was found
+     */
+    protected function statsFor(string $url, mixed $result, array $extra = []): array
+    {
+        if (! $result instanceof Response) {
+            return [
+                'url' => $url,
+                'status' => null,
+                'success' => false,
+                'failed' => true,
+                'time' => null,
+                'exception' => $result instanceof \Throwable ? $result->getMessage() : 'Unknown error',
+                ...$extra,
+            ];
+        }
+
+        return [
+            'url' => $url,
+            'status' => $result->status(),
+            'success' => $result->successful(),
+            'failed' => $result->failed() || $result->serverError() || $result->clientError(),
+            'time' => $result->transferStats?->getTransferTime(),
+            ...$this->redirectStats($result),
+            ...$extra,
+        ];
+    }
 
     /**
      * Validate --redirects and remember the limit, so an unusable value is reported before

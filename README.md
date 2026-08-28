@@ -19,7 +19,15 @@ Run `site-crawler` to get a list of all available crawling commands.
 
 Example: `site-crawler crawl:url https://example.com --limit=50 --concurrency=10 --basic-auth=user:pass --exclude=action,imprint --output`
 
-Crawling is sequential by default (`--concurrency=1`). Pass a higher `--concurrency` to crawl multiple URLs in parallel per wave; newly discovered links are gathered wave by wave, so each batch of concurrent requests feeds the next. Note that parallel crawling only speeds things up when the target server actually handles requests concurrently - a local dev server with a single worker will process them one at a time regardless.
+Crawling is sequential by default (`--concurrency=1`). Pass a higher `-c`|`--concurrency` (or its `-p`|`--parallel` alias) to crawl multiple URLs in parallel per wave. Every `crawl:*` command supports it:
+
+- `crawl:url` and `crawl:ddev` gather newly discovered links wave by wave, so each batch of concurrent requests feeds the next.
+- `crawl:csv` sends the URLs from the file in waves. The report and the CSV output keep the order of the input file, not the order the responses happened to arrive in.
+
+Note that parallel crawling only speeds things up when the target server actually handles requests concurrently - a local dev server with a single worker will process them one at a time regardless.
+
+> [!WARNING]
+> On `crawl:csv`, `-c` used to be the shortcut for `--url-column`. It now means `--concurrency`, consistently with the other commands. If you have scripts passing `-c 2` to select a column, change them to `--url-column=2`, otherwise the value is silently read as a wave size.
 
 ### Writing the results to a CSV file
 
