@@ -5,94 +5,82 @@ namespace SiteCrawler\Commands;
 use GuzzleHttp\Exception\TooManyRedirectsException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
-use LaravelZero\Framework\Commands\Command;
+use SiteCrawler\Console\CrawlCommand;
 
-class CrawlCsv extends Command
+class CrawlCsv extends CrawlCommand
 {
-    public $signature = 'crawl:csv '
-    .'{file : The path to the CSV file on the system.}'
-    .'{--c|url-column=1 : The index1 of the column containing the URLs to crawl.}'
-    .'{--H|header-rows=0 : The number of header rows to skip.}'
-    .'{--s|separator=, : The separator character used in the CSV file.}'
-    .'{--enclosure=" : The enclosure character used in the CSV file.}'
-    .'{--escape=\\ : The escape character used in the CSV file.}'
-    .'{--basic-auth= : user:password (user must not contain a colon)}'
-    .'{--y|yes : Skip the confirmation prompt.}';
-
     protected $description = 'Crawls the URls inside a single CSV column. (For the lack of a better word, "crawl" in this context means the app will make one request per URL in the CSV and NOT use each one as the starting point of a separate website crawling process.)';
 
-    private array $requests = [];
-
-    private array $basicAuth = [];
-
-    public function handle(): void
+    public function __construct()
     {
+        $this->signature = 'crawl:csv '
+            .'{file : The path to the CSV file on the system.}'
+            .'{--c|url-column=1 : The index1 of the column containing the URLs to crawl.}'
+            .'{--H|header-rows=0 : The number of header rows to skip.}'
+            .'{--s|separator=, : The separator character used in the CSV file.}'
+            .'{--enclosure=" : The enclosure character used in the CSV file.}'
+            .'{--escape=\\ : The escape character used in the CSV file.}'
+            .'{--basic-auth= : user:password (user must not contain a colon)}'
+            .'{--y|yes : Skip the confirmation prompt.}'
+            .self::$outputOption;
+
+        parent::__construct();
+    }
+
+    public function handle(): int
+    {
+        /**
+         * Resolve and check the destination before anything else, so the crawl is neither
+         * confirmed nor started when its results could not be written afterwards.
+         */
+        $outputPath = $this->outputRequested() ? $this->resolveOutputPath() : null;
+
+        if ($outputPath && ! $this->assertOutputWritable($outputPath)) {
+            return self::FAILURE;
+        }
+
         $urls = $this->extractUrlsFromCsv();
         $totalUrls = $urls->count();
 
         if (! $this->option('yes') && ! $this->confirm('Extracted URLs:'.PHP_EOL.PHP_EOL.implode(PHP_EOL, $urls->toArray()).PHP_EOL.PHP_EOL."Proceed to crawl $totalUrls URLs?")) {
             $this->warn('Crawling cancelled.');
 
-            return;
+            return self::SUCCESS;
         }
 
-        if ($this->option('basic-auth')) {
-            [$username, $password] = explode(':', $this->option('basic-auth'), 2);
-            $this->basicAuth = [
-                'username' => $username,
-                'password' => $password,
-            ];
+        $this->resolveBasicAuth();
+
+        $urls->each(fn ($url) => $this->makeRequest($url));
+
+        $this->renderSummary();
+
+        if ($outputPath) {
+            $this->writeOutputCsv($outputPath);
         }
 
-        $urls->each(function ($url) {
-            $this->makeRequest(
-                url: $url,
-                onAfterFetch: function (array $stats) {
-                    $message = implode(', ', [
-                        'Status: '.$stats['status'] ?? 'N/A',
-                        $stats['time'] ?? 'N/A',
-                        $stats['url'],
-                    ]);
+        return self::SUCCESS;
+    }
 
-                    match ($stats['status']) {
-                        200 => $this->info($message),
-                        default => $this->warn($message),
-                    };
-                },
-            );
-        });
+    protected function summaryTitle(): string
+    {
+        return 'Crawling completed for '.$this->argument('file');
+    }
 
-        $failedRequests = collect($this->requests)->where('failed', true);
+    protected function defaultOutputBasename(): string
+    {
+        return $this->outputBasenameFor(pathinfo(trim($this->argument('file')), PATHINFO_FILENAME));
+    }
 
-        $this->info('Crawling completed for '.$this->argument('file'));
-        $this->info('Total requests: '.count($this->requests));
-        $this->info('Total successful request: '.collect($this->requests)->where('success', true)->count());
-        $this->info('Total failed request: '.$failedRequests->count());
-        $this->info('Average request time: '.collect($this->requests)->avg('time').' seconds');
-
-        $this->newLine();
-        $this->warn('Slowest requests:');
-        $this->table(['URL', 'Status', 'Time'],
-            collect($this->requests)
-                ->sortByDesc('time')
-                ->filter(fn ($request) => $request['status'] === 200)
-                ->take(3)
-                ->map(fn ($request) => [
-                    $request['url'],
-                    $request['status'] ?? 'N/A',
-                    $request['time'] ?? 'N/A',
-                ])
-        );
-
-        if ($failedRequests->isNotEmpty()) {
-            $this->warn('Failed requests:');
-            $this->table(['URL', 'Status', 'Time', 'Error'], $failedRequests->map(fn ($request) => [
-                $request['url'],
-                $request['status'] ?? 'N/A',
-                $request['time'] ?? 'N/A',
-                $request['exception'] ?? 'N/A',
-            ]));
-        }
+    protected function csvColumns(): array
+    {
+        return [
+            'url' => 'url',
+            'status' => 'status',
+            'success' => 'success',
+            'failed' => 'failed',
+            'time' => 'time',
+            'error' => 'exception',
+        ];
     }
 
     private function extractUrlsFromCsv(): Collection
@@ -110,7 +98,7 @@ class CrawlCsv extends Command
             ->pluck($urlColumn);
     }
 
-    private function makeRequest(string $url, callable $onAfterFetch): void
+    private function makeRequest(string $url): void
     {
         try {
             $request = Http::withHeader('x-webhub', 'webhub-site-crawler')
@@ -128,35 +116,23 @@ class CrawlCsv extends Command
 
             $requestTime = microtime(true) - $start;
 
-            $stats = [
+            $this->recordRequest([
                 'url' => $url,
                 'status' => $response->status(),
                 'success' => $response->successful(),
                 'failed' => $response->failed() || $response->serverError() || $response->clientError(),
                 'time' => $requestTime,
-            ];
-
-            $this->requests[] = $stats;
-
-            if (is_callable($onAfterFetch)) {
-                $onAfterFetch($stats);
-            }
+            ]);
 
         } catch (TooManyRedirectsException $e) {
-            $stats = [
+            $this->recordRequest([
                 'url' => $url,
                 'status' => null,
                 'success' => false,
                 'failed' => true,
                 'time' => null,
                 'exception' => $e->getMessage(),
-            ];
-
-            $this->requests[] = $stats;
-
-            if (is_callable($onAfterFetch)) {
-                $onAfterFetch($stats);
-            }
+            ]);
 
         } catch (\Throwable $e) {
             $this->error($e::class.' with message '.$e->getMessage().' on '.$url);

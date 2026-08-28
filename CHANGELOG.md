@@ -9,11 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.3.0] - 2026-08-26
 ### Added
-- Added the `-o`|`--output` option to all `crawl:*` command to output the results as a `CSV` file.
+- Added the `-o`|`--output` option to all `crawl:*` commands to write the results into a `CSV` file.
 - Added the `-y`|`--yes` option to the `crawl:csv` command to skip the confirmation prompt.
 
 ### Changed
-- Changed all `crawl:*` commands to not clear their output on completion.
+- Changed all `crawl:*` commands to not clear their output on completion anymore.
+
+### Fixed 
+- Fixed the `-l`|`--limit` option of the `crawl:url` and `crawl:ddev` not working as intended.
 
 ## [3.2.4] - 2026-08-26
 ### Fixed

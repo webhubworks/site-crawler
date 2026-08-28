@@ -12,19 +12,20 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
-use LaravelZero\Framework\Commands\Command;
+use SiteCrawler\Console\CrawlCommand;
 use Spatie\Url\Exceptions\InvalidArgument;
 use Spatie\Url\Url;
 
-class CrawlUrl extends Command implements PromptsForMissingInput
+class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
 {
-    protected $signature = 'crawl:url '
-    .'{url : The URL to start crawling from}'
-    .'{--l|limit=250 : Only crawl a certain amount of URLs}'
-    .'{--c|concurrency=1 : Number of URLs to crawl in parallel per wave (defaults to sequential crawling)}'
-    .'{--e|exclude= : Exclude URLs from crawling that contain the following paths, separate by comma}'
-    .'{--basic-auth= : user:password (user must not contain a colon)}'
-    .'{--m|modes= : Comma-separated list of modes to enable (e.g. cache)}';
+    /**
+     * The options shared with crawl:ddev, which wraps this command.
+     */
+    public static string $options = '{--l|limit=250 : Only crawl a certain amount of URLs}'
+        .'{--c|concurrency=1 : Number of URLs to crawl in parallel per wave (1 = sequential, the default)}'
+        .'{--e|exclude= : Exclude URLs from crawling that contain the following paths, separate by comma}'
+        .'{--basic-auth= : user:password (user must not contain a colon)}'
+        .'{--m|modes= : Comma-separated list of modes to enable (e.g. cache)}';
 
     protected $description = 'Crawls an entire website starting on {url} until it reaches {limit} excluding URLs that contain any of these strings: {exclude}.';
 
@@ -37,8 +38,6 @@ class CrawlUrl extends Command implements PromptsForMissingInput
      */
     private array $queue = [];
 
-    private array $requests = [];
-
     /**
      * @var Collection<int,Url>|null
      */
@@ -46,23 +45,20 @@ class CrawlUrl extends Command implements PromptsForMissingInput
 
     private Url $startUrl;
 
-    /**
-     * @var array{username: string, password: string}
-     */
-    private array $basicAuth = [];
-
     private array $excludes = [];
 
     private array $modes = [];
 
     public function __construct()
     {
+        $this->signature = 'crawl:url {url} '.self::$options.self::$outputOption;
+
         parent::__construct();
 
         $this->visitedUrls = collect();
     }
 
-    public function handle(): void
+    public function handle(): int
     {
         Validator::make($this->arguments(), [
             'url' => 'required|url',
@@ -80,86 +76,30 @@ class CrawlUrl extends Command implements PromptsForMissingInput
 
         $this->modes = $this->option('modes') ? explode(',', $this->option('modes')) : [];
 
-        if ($this->option('basic-auth')) {
-            [$username, $password] = explode(':', $this->option('basic-auth'), 2);
-            $this->basicAuth = [
-                'username' => $username,
-                'password' => $password,
-            ];
+        $this->resolveBasicAuth();
+
+        /**
+         * Resolve and check the destination up front so a completed crawl is never
+         * thrown away because its results cannot be written.
+         */
+        $outputPath = $this->outputRequested() ? $this->resolveOutputPath() : null;
+
+        if ($outputPath && ! $this->assertOutputWritable($outputPath)) {
+            return self::FAILURE;
         }
 
-        $this->crawl(
-            onAfterFetch: function (array $stats) {
-                $message = implode(', ', [
-                    'Status: '.$stats['status'] ?? 'N/A',
-                    $stats['time'] ?? 'N/A',
-                    $stats['url'],
-                    $stats['foundOn'] ? 'Found on: '.$stats['foundOn'] : null,
-                ]);
+        $this->crawl(withBasicAuth: ! empty($this->basicAuth));
 
-                match ($stats['status']) {
-                    200 => $this->info($message),
-                    default => $this->warn($message),
-                };
-            },
-            withBasicAuth: ! empty($this->basicAuth)
-        );
+        $this->renderSummary();
 
-        $failedRequests = collect($this->requests)->where('failed', true);
-
-        $this->newLine();
-        $this->info('Crawling completed for '.$this->startUrl);
-        if (count($this->requests) === $this->option('limit')) {
-            $this->warn('Crawling limit of '.$this->option('limit').' reached.');
-        }
-        $this->info('Total requests: '.count($this->requests));
-        $this->info('Total successful request: '.collect($this->requests)->where('success', true)->count());
-        $this->info('Total failed request: '.$failedRequests->count());
-        $this->info('Average request time: '.collect($this->requests)->avg('time').' seconds');
-
-        $this->newLine();
-        $this->warn('Slowest requests:');
-        $this->table(['URL', 'Status', 'Time', 'First found on'],
-            collect($this->requests)
-                ->sortByDesc('time')
-                ->filter(fn ($request) => $request['status'] === 200)
-                ->take(3)
-                ->map(fn ($request) => [
-                    $request['url'],
-                    $request['status'] ?? 'N/A',
-                    $request['time'] ?? 'N/A',
-                    $request['foundOn'] ?? 'N/A',
-                ])
-        );
-
-        if ($failedRequests->isNotEmpty()) {
-            $this->warn('Failed requests:');
-            $this->table(['URL', 'Status', 'Time', 'Error', 'First found on'], $failedRequests->map(fn ($request) => [
-                $request['url'],
-                $request['status'] ?? 'N/A',
-                $request['time'] ?? 'N/A',
-                $request['exception'] ?? 'N/A',
-                $request['foundOn'] ?? 'N/A',
-            ]));
+        if ($outputPath) {
+            $this->writeOutputCsv($outputPath);
         }
 
-        if ($this->hasCacheMode()) {
-            $this->newLine();
-            $this->info('Cache-Control headers:');
-
-            collect($this->requests)
-                ->whereNotNull('cacheControl')
-                ->groupBy('cacheControl')
-                ->sortKeys()
-                ->each(function (Collection $requests, string $cacheControl) {
-                    $this->newLine();
-                    $this->warn($cacheControl);
-                    $this->table(['URL'], $requests->map(fn (array $request) => [$request['url']]));
-                });
-        }
+        return self::SUCCESS;
     }
 
-    public function crawl(?callable $onAfterFetch = null, bool $withBasicAuth = false): void
+    public function crawl(bool $withBasicAuth = false): void
     {
         $count = 0;
 
@@ -198,7 +138,7 @@ class CrawlUrl extends Command implements PromptsForMissingInput
                 $count++;
 
                 if (! $result instanceof Response) {
-                    $stats = [
+                    $this->recordRequest([
                         'url' => (string) $urlSet['url'],
                         'foundOn' => $urlSet['foundOn'],
                         'status' => null,
@@ -206,18 +146,12 @@ class CrawlUrl extends Command implements PromptsForMissingInput
                         'failed' => true,
                         'time' => null,
                         'exception' => $result instanceof \Throwable ? $result->getMessage() : 'Unknown error',
-                    ];
-
-                    $this->requests[] = $stats;
-
-                    if (is_callable($onAfterFetch)) {
-                        $onAfterFetch($stats);
-                    }
+                    ]);
 
                     continue;
                 }
 
-                $stats = [
+                $this->recordRequest([
                     'url' => (string) $urlSet['url'],
                     'foundOn' => $urlSet['foundOn'],
                     'status' => $result->status(),
@@ -225,13 +159,7 @@ class CrawlUrl extends Command implements PromptsForMissingInput
                     'failed' => $result->failed() || $result->serverError() || $result->clientError(),
                     'time' => $result->transferStats?->getTransferTime(),
                     'cacheControl' => $this->hasCacheMode() ? ($result->header('Cache-Control') ?: 'not set') : null,
-                ];
-
-                $this->requests[] = $stats;
-
-                if (is_callable($onAfterFetch)) {
-                    $onAfterFetch($stats);
-                }
+                ]);
 
                 if ($result->successful()) {
                     $links = $this->parseUrlsFromResponseBody($result);
@@ -239,6 +167,83 @@ class CrawlUrl extends Command implements PromptsForMissingInput
                 }
             }
         }
+    }
+
+    protected function summaryTitle(): string
+    {
+        return 'Crawling completed for '.$this->startUrl;
+    }
+
+    protected function summaryNotices(): array
+    {
+        if (count($this->requests) < $this->requestLimit) {
+            return [];
+        }
+
+        return ['Crawling limit of '.$this->requestLimit.' reached.'];
+    }
+
+    protected function defaultOutputBasename(): string
+    {
+        return $this->outputBasenameFor($this->startUrl->getHost());
+    }
+
+    protected function csvColumns(): array
+    {
+        return [
+            'url' => 'url',
+            'status' => 'status',
+            'success' => 'success',
+            'failed' => 'failed',
+            'time' => 'time',
+            'found_on' => 'foundOn',
+            'cache_control' => 'cacheControl',
+            'error' => 'exception',
+        ];
+    }
+
+    protected function logSegments(array $stats): array
+    {
+        return [
+            ...parent::logSegments($stats),
+            $stats['foundOn'] ? 'Found on: '.$stats['foundOn'] : null,
+        ];
+    }
+
+    protected function slowestTableColumns(): array
+    {
+        return [
+            ...parent::slowestTableColumns(),
+            'First found on' => 'foundOn',
+        ];
+    }
+
+    protected function failedTableColumns(): array
+    {
+        return [
+            ...parent::failedTableColumns(),
+            'First found on' => 'foundOn',
+        ];
+    }
+
+    protected function renderAdditionalSummary(): void
+    {
+        if (! $this->hasCacheMode()) {
+            return;
+        }
+
+        $this->newLine();
+        $this->info('Cache-Control headers:');
+
+        collect($this->requests)
+            ->whereNotNull('cacheControl')
+            ->groupBy('cacheControl')
+            ->sortKeys()
+            ->each(function (Collection $requests, string $cacheControl) {
+                $this->newLine();
+                $this->warn($cacheControl);
+                $this->table(['URL'], $requests->map(fn (array $request) => [$request['url']]));
+            });
     }
 
     /**
