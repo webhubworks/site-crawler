@@ -9,16 +9,15 @@ use LaravelZero\Framework\Commands\Command;
 
 class CrawlCsv extends Command
 {
-    public $signature = '
-    crawl:csv
-    {file : The path to the CSV file on the system.}
-    {--c|url-column=1 : The index1 of the column containing the URLs to crawl.}
-    {--H|header-rows=0 : The number of header rows to skip.}
-    {--s|separator=, : The separator character used in the CSV file.}
-    {--enclosure=" : The enclosure character used in the CSV file.}
-    {--escape=\\ : The escape character used in the CSV file.}
-    {--basic-auth= : user:password (user must not contain a colon)}
-    ';
+    public $signature = 'crawl:csv '
+    .'{file : The path to the CSV file on the system.}'
+    .'{--c|url-column=1 : The index1 of the column containing the URLs to crawl.}'
+    .'{--H|header-rows=0 : The number of header rows to skip.}'
+    .'{--s|separator=, : The separator character used in the CSV file.}'
+    .'{--enclosure=" : The enclosure character used in the CSV file.}'
+    .'{--escape=\\ : The escape character used in the CSV file.}'
+    .'{--basic-auth= : user:password (user must not contain a colon)}'
+    .'{--y|yes : Skip the confirmation prompt.}';
 
     protected $description = 'Crawls the URls inside a single CSV column. (For the lack of a better word, "crawl" in this context means the app will make one request per URL in the CSV and NOT use each one as the starting point of a separate website crawling process.)';
 
@@ -31,7 +30,7 @@ class CrawlCsv extends Command
         $urls = $this->extractUrlsFromCsv();
         $totalUrls = $urls->count();
 
-        if (! $this->confirm('Extracted URLs:'.PHP_EOL.PHP_EOL.implode(PHP_EOL, $urls->toArray()).PHP_EOL.PHP_EOL."Proceed to crawl $totalUrls URLs?")) {
+        if (! $this->option('yes') && ! $this->confirm('Extracted URLs:'.PHP_EOL.PHP_EOL.implode(PHP_EOL, $urls->toArray()).PHP_EOL.PHP_EOL."Proceed to crawl $totalUrls URLs?")) {
             $this->warn('Crawling cancelled.');
 
             return;
