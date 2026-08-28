@@ -83,6 +83,7 @@ abstract class CrawlCommand extends Command
             'Status: '.($stats['status'] ?? 'N/A'),
             $stats['time'] ?? 'N/A',
             $stats['url'],
+            isset($stats['exception']) ? 'Error: '.$stats['exception'] : null,
         ];
     }
 

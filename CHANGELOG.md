@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-
+## [3.3.1] - 2026-08-28
+### Fixed
+- Fixed the `crawl:csv` command dropping requests that failed without a response (DNS failure, refused connection, timeout). They were missing from the summary totals, the failed requests table and the `CSV` output file.
 
 ## [3.3.0] - 2026-08-28
 ### Added

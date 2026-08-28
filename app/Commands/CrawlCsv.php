@@ -2,7 +2,6 @@
 
 namespace SiteCrawler\Commands;
 
-use GuzzleHttp\Exception\TooManyRedirectsException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use SiteCrawler\Console\CrawlCommand;
@@ -124,7 +123,12 @@ class CrawlCsv extends CrawlCommand
                 'time' => $requestTime,
             ]);
 
-        } catch (TooManyRedirectsException $e) {
+        } catch (\Throwable $e) {
+            /**
+             * The request never produced a response (DNS failure, refused connection,
+             * timeout, too many redirects). Record it like any other failure so it reaches
+             * the summary totals and the CSV instead of only scrolling past in the console.
+             */
             $this->recordRequest([
                 'url' => $url,
                 'status' => null,
@@ -133,9 +137,6 @@ class CrawlCsv extends CrawlCommand
                 'time' => null,
                 'exception' => $e->getMessage(),
             ]);
-
-        } catch (\Throwable $e) {
-            $this->error($e::class.' with message '.$e->getMessage().' on '.$url);
         }
     }
 }
