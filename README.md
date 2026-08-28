@@ -36,7 +36,7 @@ The terminal summary only shows the three slowest requests and the failures. Pas
 > [!WARNING]  
 > This will overwrite any existing file at the destination.
  
-> [!INFO]
+> [!NOTE]
 > - The destination is checked before the first request is made, so a crawl is never wasted on a file that cannot be written.
 > - The generated name identifies what was crawled: `crawl:url` and `crawl:ddev` use the host, `crawl:csv` uses the name of the input file.
 > - The terminal output is unchanged either way – the CSV is purely additional.
