@@ -1,7 +1,11 @@
 <?php
 
+use Illuminate\Console\OutputStyle;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use SiteCrawler\Commands\CrawlCsv;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\BufferedOutput;
 
 beforeEach(function () {
     $this->home = sys_get_temp_dir().'/site-crawler-conn-'.bin2hex(random_bytes(6));
@@ -58,4 +62,43 @@ it('still reports the failure reason in the console', function () {
     $this->artisan('crawl:csv', ['file' => $this->source, '--yes' => true])
         ->expectsOutputToContain('Error: cURL error 6: Could not resolve host')
         ->assertSuccessful();
+});
+
+/**
+ * Render a single live-output line with ANSI decoration, so the style each kind of
+ * result is printed in can be asserted.
+ */
+function styledLogLine(array $stats): string
+{
+    $buffer = new BufferedOutput(BufferedOutput::VERBOSITY_NORMAL, decorated: true);
+
+    $command = new CrawlCsv;
+    $command->setLaravel(app());
+    $command->setOutput(new OutputStyle(new ArrayInput([]), $buffer));
+
+    (fn () => $this->logRequest($stats))->call($command);
+
+    return $buffer->fetch();
+}
+
+it('prints a response that never arrived as an error, not a warning', function () {
+    $line = styledLogLine([
+        'url' => 'https://unreachable.test/',
+        'status' => null,
+        'success' => false,
+        'failed' => true,
+        'time' => null,
+        'exception' => 'Could not resolve host',
+    ]);
+
+    expect($line)->toStartWith("\e[37;41m")  // white on red, same as $this->error()
+        ->and($line)->toContain('Error: Could not resolve host');
+});
+
+it('keeps http error statuses as warnings and successes as info', function () {
+    $base = ['url' => 'https://example.com', 'success' => false, 'failed' => true, 'time' => 0.1];
+
+    expect(styledLogLine([...$base, 'status' => 404]))->toStartWith("\e[33m")   // yellow
+        ->and(styledLogLine([...$base, 'status' => 500]))->toStartWith("\e[33m")
+        ->and(styledLogLine([...$base, 'status' => 200]))->toStartWith("\e[32m"); // green
 });

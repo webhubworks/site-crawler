@@ -68,8 +68,13 @@ abstract class CrawlCommand extends Command
     {
         $message = implode(', ', array_filter($this->logSegments($stats)));
 
-        match ($stats['status']) {
-            200 => $this->info($message),
+        match (true) {
+            $stats['status'] === 200 => $this->info($message),
+            /**
+             * No status means no response came back at all, which is an error rather than
+             * a page that merely answered with an error code.
+             */
+            $stats['status'] === null => $this->error($message),
             default => $this->warn($message),
         };
     }
