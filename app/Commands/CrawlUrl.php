@@ -99,10 +99,9 @@ class CrawlUrl extends Command implements PromptsForMissingInput
             withBasicAuth: ! empty($this->basicAuth)
         );
 
-        system('clear');
-
         $failedRequests = collect($this->requests)->where('failed', true);
 
+        $this->newLine();
         $this->info('Crawling completed for '.$this->startUrl);
         if (count($this->requests) === $this->option('limit')) {
             $this->warn('Crawling limit of '.$this->option('limit').' reached.');
