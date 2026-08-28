@@ -5,24 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+
+## [3.3.0] - 2026-08-26
+### Added
+- Added the `-o`|`--output` option to all `crawl:*` command to output the results as a `CSV` file.
+- Added the `-y`|`--yes` option to the `crawl:csv` command to skip the confirmation prompt.
+
+### Changed
+- Changed all `crawl:*` commands to not clear their output on completion.
+
+## [3.2.4] - 2026-08-26
+### Fixed
+- Fixed potential autoloader namespace collisions by giving the app a more unique namespace.
+ 
+## [3.2.3] - 2026-07-17
+### Fixed
+- Fixed the distributed app not working due to missing dependencies.
+
+## [3.2.2] - 2026-07-16
+### Changed
+- Changed the default of the `-c`|`--concurrency` option to `1` making `crawl:url` and `crawl:ddev` default to sequential crawling.
+
 ## [3.2.1] - 2026-07-16
 ### Changed
-- The globally installed command now runs the package source directly instead of a prebuilt phar (the `bin` points to the `site-crawler` entry script). Releasing no longer requires a build step - a new version ships by pushing a git tag.
+- Changed the distributed app to run the package source directly instead of a prebuilt phar.
 
 ## [3.2.0] - 2026-07-16
 ### Added
-- The `crawl:url` and `crawl:ddev` commands can now crawl in parallel via a new `--concurrency` (`-c`) option that sets how many URLs are fetched concurrently per wave. It defaults to `1` (sequential); pass a higher value to opt into parallel crawling.
+- Added the  `-c`|`--concurrency` option to the `crawl:url` and `crawl:ddev` commands enabling them to crawl multiple URLs in parallel. By default, 10 URLs are crawled in parallel.
 
 ### Changed
-- Per-request timing now uses the actual transfer time reported by the HTTP client, so the "slowest requests" report stays accurate under concurrent crawling.
+- Changed the per-request timing to use the actual transfer time reported by the HTTP client, so the "Slowest Requests" report stays accurate with concurrent crawling.
 
 ## [3.1.4] - 2026-07-09
 ### Fixed
-- Updated the contents of the README to reflect the new command signatures.
+- Fixed the README using the pre `3.1.0` command signatures.
 
 ## [3.1.3] - 2026-04-17
 ### Changed
-- The `--exclude` option of the `crawl:url` and `crawl:ddev` commands now also looks at the query parameters and not just the path segments to exclude a given URL.
+- Changed the `-e`|`--exclude` option of the `crawl:url` and `crawl:ddev` commands to now also check the query parameters and not just the path segments of a given URL.
 
 ## [3.1.2] - 2026-04-01
 ### Fixed
@@ -30,15 +52,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.1.1] - 2026-03-31
 ### Fixed
-- Removed a redundant error message from the `crawl:ddev` command.
+- Fixed a redundant error message being output by the `crawl:ddev` command.
 
 ## [3.1.0] - 2026-03-31
 ### Added
-- Added the `crawl:csv` command to crawl over a CSV list of URLs.\
+- Added the `crawl:csv` command to crawl over a set list of URLs provided via a `CSV` file.\
   Learn more via `site-crawler crawl:csv --help`
 
 ### Changed
-- Reworded some command and command option descriptions
+- Changed descriptions of some commands and their options.
 - Changed command signatures:
   - `app:crawl` => `crawl:url`
   - `app:crawl-ddev` => `crawl:ddev`
