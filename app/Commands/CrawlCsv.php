@@ -19,15 +19,18 @@ class CrawlCsv extends CrawlCommand
             .'{--s|separator=, : The separator character used in the CSV file.}'
             .'{--enclosure=" : The enclosure character used in the CSV file.}'
             .'{--escape=\\ : The escape character used in the CSV file.}'
-            .'{--basic-auth= : user:password (user must not contain a colon)}'
             .'{--y|yes : Skip the confirmation prompt.}'
-            .self::$outputOption;
+            .self::sharedOptions();
 
         parent::__construct();
     }
 
     public function handle(): int
     {
+        if (! $this->resolveRedirectLimit()) {
+            return self::FAILURE;
+        }
+
         /**
          * Resolve and check the destination before anything else, so the crawl is neither
          * confirmed nor started when its results could not be written afterwards.
@@ -79,6 +82,8 @@ class CrawlCsv extends CrawlCommand
             'failed' => 'failed',
             'time' => 'time',
             'error' => 'exception',
+            'redirects' => 'redirects',
+            'final_url' => 'finalUrl',
         ];
     }
 
@@ -102,7 +107,8 @@ class CrawlCsv extends CrawlCommand
         try {
             $request = Http::withHeader('x-webhub', 'webhub-site-crawler')
                 ->timeout(15)
-                ->maxRedirects(3)
+                ->maxRedirects($this->redirectLimit)
+                ->withOptions(['allow_redirects' => ['track_redirects' => true]])
                 ->retry(3, 200, throw: false);
 
             if (! empty($this->basicAuth)) {
@@ -121,6 +127,7 @@ class CrawlCsv extends CrawlCommand
                 'success' => $response->successful(),
                 'failed' => $response->failed() || $response->serverError() || $response->clientError(),
                 'time' => $requestTime,
+                ...$this->redirectStats($response),
             ]);
 
         } catch (\Throwable $e) {

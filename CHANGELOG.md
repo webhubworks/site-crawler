@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-08-28
+- Added the `-r`|`--redirects` option to all `crawl:*` commands to set how many redirects are followed per URL. Defaults to 3 as before. Use 0 to not follow redirects at all and report the `3XX` response itself.
+- Added the number of followed redirects and the final URL to the terminal output and to the `redirects` and `final_url` columns of the `CSV` output, to make a redirected URL distinguishable from a direct hit.
+
 ## [3.3.1] - 2026-08-28
 ### Fixed
 - Fixed the `crawl:csv` command dropping requests that failed without a response (DNS failure, refused connection, timeout). They were missing from the summary totals, the failed requests table and the `CSV` output file.

@@ -41,6 +41,28 @@ The terminal summary only shows the three slowest requests and the failures. Pas
 > - The generated name identifies what was crawled: `crawl:url` and `crawl:ddev` use the host, `crawl:csv` uses the name of the input file.
 > - The terminal output is unchanged either way – the CSV is purely additional.
 
+### Following redirects
+
+Up to 3 redirects are followed per URL. Pass `-r`|`--redirects` to change that, which is how you tell a long but legitimate redirect chain from a loop:
+
+| Option | Behaviour |
+| --- | --- |
+| *(omitted)* | Follow up to 3 redirects |
+| `-r 10` | Follow up to 10; a loop reports `Will not follow more than 10 redirects` |
+| `-r 0` | Do not follow at all and report the `3xx` response itself |
+
+Every request records how far it was redirected and where it landed, so a redirected URL is never mistaken for a direct hit:
+
+```
+Status: 200, 1.499, https://httpbin.org/redirect/6, 6 redirects -> https://httpbin.org/get
+```
+
+The CSV carries the same information in its `redirects` and `final_url` columns, both empty-or-zero for a URL that did not redirect.
+
+> [!NOTE]
+> - An invalid value is reported before the first request is made, and `-r` without a value is rejected rather than read as `0`.
+> - With `-r 0`, a `3xx` is neither a success nor a failure in HTTP terms, so those rows count towards `Total requests` but towards neither of the two totals below it.
+
 ## Roadmap
 - [ ] Add support for websites containing links in JS generated markup
 - [x] Run requests in parallel

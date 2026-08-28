@@ -150,7 +150,7 @@ it('writes the full per-request record for crawl:url', function () {
 
     $rows = array_map('str_getcsv', file($this->home.'/report.csv', FILE_IGNORE_NEW_LINES));
 
-    expect($rows[0])->toBe(['url', 'status', 'success', 'failed', 'time', 'found_on', 'cache_control', 'error']);
+    expect($rows[0])->toBe(['url', 'status', 'success', 'failed', 'time', 'found_on', 'cache_control', 'error', 'redirects', 'final_url']);
 
     $byUrl = collect($rows)->skip(1)->keyBy(0);
 
@@ -199,7 +199,7 @@ it('writes a narrower record for crawl:csv', function () {
 
     $rows = array_map('str_getcsv', file($this->home.'/report.csv', FILE_IGNORE_NEW_LINES));
 
-    expect($rows[0])->toBe(['url', 'status', 'success', 'failed', 'time', 'error'])
+    expect($rows[0])->toBe(['url', 'status', 'success', 'failed', 'time', 'error', 'redirects', 'final_url'])
         ->and($rows)->toHaveCount(3)
         ->and($rows[1][0])->toBe('https://example.com/one')
         ->and($rows[1][1])->toBe('200')

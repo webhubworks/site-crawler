@@ -21,12 +21,12 @@ use Spatie\Url\Url;
 class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
 {
     /**
-     * The options shared with crawl:ddev, which wraps this command.
+     * The options specific to crawling a whole site, shared with crawl:ddev, which wraps
+     * this command. The options every crawl command takes live on CrawlCommand.
      */
     public static string $options = '{--l|limit=250 : Only crawl a certain amount of URLs}'
         .'{--c|concurrency=1 : Number of URLs to crawl in parallel per wave (1 = sequential, the default)}'
         .'{--e|exclude= : Exclude URLs from crawling that contain the following paths, separate by comma}'
-        .'{--basic-auth= : user:password (user must not contain a colon)}'
         .'{--m|modes= : Comma-separated list of modes to enable (e.g. cache)}';
 
     protected $description = 'Crawls an entire website starting on {url} until it reaches {limit} excluding URLs that contain any of these strings: {exclude}.';
@@ -53,7 +53,7 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
 
     public function __construct()
     {
-        $this->signature = 'crawl:url {url} '.self::$options.self::$outputOption;
+        $this->signature = 'crawl:url {url} '.self::$options.self::sharedOptions();
 
         parent::__construct();
 
@@ -79,6 +79,10 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
         $this->modes = $this->option('modes') ? explode(',', $this->option('modes')) : [];
 
         $this->resolveBasicAuth();
+
+        if (! $this->resolveRedirectLimit()) {
+            return self::FAILURE;
+        }
 
         /**
          * Resolve and check the destination up front so a completed crawl is never
@@ -121,7 +125,8 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
                     $request = $pool->as((string) $key)
                         ->withHeader('x-webhub', 'webhub-site-crawler')
                         ->timeout(15)
-                        ->maxRedirects(3)
+                        ->maxRedirects($this->redirectLimit)
+                        ->withOptions(['allow_redirects' => ['track_redirects' => true]])
                         ->retry(3, 200, throw: false);
 
                     if ($withBasicAuth && ! empty($this->basicAuth)) {
@@ -161,6 +166,7 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
                     'failed' => $result->failed() || $result->serverError() || $result->clientError(),
                     'time' => $result->transferStats?->getTransferTime(),
                     'cacheControl' => $this->hasCacheMode() ? ($result->header('Cache-Control') ?: 'not set') : null,
+                    ...$this->redirectStats($result),
                 ]);
 
                 if ($result->successful()) {
@@ -201,6 +207,8 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
             'found_on' => 'foundOn',
             'cache_control' => 'cacheControl',
             'error' => 'exception',
+            'redirects' => 'redirects',
+            'final_url' => 'finalUrl',
         ];
     }
 

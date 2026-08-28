@@ -2,6 +2,7 @@
 
 namespace SiteCrawler\Console;
 
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use LaravelZero\Framework\Commands\Command;
@@ -9,19 +10,39 @@ use LaravelZero\Framework\Commands\Command;
 abstract class CrawlCommand extends Command
 {
     /**
-     * The option definition shared by every crawl command.
+     * The option definitions shared by every crawl command. Each is defined once here and
+     * appended to a command's signature through sharedOptions().
      */
+    public static string $basicAuthOption = '{--basic-auth= : user:password (user must not contain a colon)}';
+
+    public static string $redirectsOption = '{--r|redirects=3 : Maximum number of redirects to follow per URL. Use 0 to not follow redirects at all and report the 3xx response itself.}';
+
     public static string $outputOption = '{--o|output= : Write the full per-request results to a CSV file. Without a value, or with a relative path, the file is written to your home directory; absolute paths are used as given. An existing file at that location is overwritten.}';
+
+    /**
+     * The header Guzzle fills with the URLs a request was redirected to.
+     */
+    private const REDIRECT_HISTORY_HEADER = 'X-Guzzle-Redirect-History';
 
     /**
      * @var array<int, array<string, mixed>>
      */
     protected array $requests = [];
 
+    protected int $redirectLimit = 3;
+
     /**
      * @var array{username: string, password: string}|array{}
      */
     protected array $basicAuth = [];
+
+    /**
+     * Every option that all crawl commands take, ready to append to a signature.
+     */
+    public static function sharedOptions(): string
+    {
+        return self::$basicAuthOption.self::$redirectsOption.self::$outputOption;
+    }
 
     /**
      * The headline printed above the summary, e.g. "Crawling completed for …".
@@ -39,6 +60,60 @@ abstract class CrawlCommand extends Command
      * @return array<string, string>
      */
     abstract protected function csvColumns(): array;
+
+    /**
+     * Validate --redirects and remember the limit, so an unusable value is reported before
+     * any request is made rather than silently changing how the crawl behaves.
+     */
+    protected function resolveRedirectLimit(): bool
+    {
+        $value = $this->option('redirects');
+
+        /**
+         * The option takes an optional value, so a bare `-r` arrives as null. Without this
+         * guard `(int) null` would be 0 and quietly mean "do not follow redirects".
+         */
+        if ($value === null) {
+            $this->error('The --redirects option requires a value, e.g. --redirects=10.');
+
+            return false;
+        }
+
+        if (! ctype_digit((string) $value)) {
+            $this->error('The --redirects option must be a whole number of 0 or more, got "'.$value.'".');
+
+            return false;
+        }
+
+        $this->redirectLimit = (int) $value;
+
+        return true;
+    }
+
+    /**
+     * The URLs a request was redirected to, in order. Empty when it did not redirect.
+     *
+     * @return array<int, string>
+     */
+    protected function redirectHistory(Response $response): array
+    {
+        return $response->getHeader(self::REDIRECT_HISTORY_HEADER);
+    }
+
+    /**
+     * The redirect fields recorded for every request, ready to merge into its stats.
+     *
+     * @return array{redirects: int, finalUrl: string|null}
+     */
+    protected function redirectStats(Response $response): array
+    {
+        $history = $this->redirectHistory($response);
+
+        return [
+            'redirects' => count($history),
+            'finalUrl' => end($history) ?: null,
+        ];
+    }
 
     protected function resolveBasicAuth(): void
     {
@@ -88,6 +163,7 @@ abstract class CrawlCommand extends Command
             'Status: '.($stats['status'] ?? 'N/A'),
             $stats['time'] ?? 'N/A',
             $stats['url'],
+            empty($stats['redirects']) ? null : $stats['redirects'].' redirects -> '.$stats['finalUrl'],
             isset($stats['exception']) ? 'Error: '.$stats['exception'] : null,
         ];
     }

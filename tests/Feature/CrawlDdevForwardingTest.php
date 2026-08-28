@@ -59,7 +59,7 @@ it('forwards an --output path to crawl:url', function () {
 
     $rows = array_map('str_getcsv', file($this->home.'/ddev.csv', FILE_IGNORE_NEW_LINES));
 
-    expect($rows[0])->toBe(['url', 'status', 'success', 'failed', 'time', 'found_on', 'cache_control', 'error'])
+    expect($rows[0])->toBe(['url', 'status', 'success', 'failed', 'time', 'found_on', 'cache_control', 'error', 'redirects', 'final_url'])
         ->and($rows[1][0])->toBe('https://acme.ddev.site');
 });
 
