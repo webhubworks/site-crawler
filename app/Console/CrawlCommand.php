@@ -11,18 +11,12 @@ use LaravelZero\Framework\Commands\Command;
 
 abstract class CrawlCommand extends Command
 {
-    /**
-     * The option definitions shared by every crawl command. Each is defined once here and
-     * appended to a command's signature through sharedOptions().
-     */
-    public static string $basicAuthOption = '{--basic-auth= : user:password (user must not contain a colon)}';
-
-    public static string $concurrencyOption = '{--c|concurrency=1 : Number of URLs to crawl in parallel per wave (1 = sequential, the default)}'
-        .'{--p|parallel= : Alias of --concurrency.}';
-
-    public static string $redirectsOption = '{--r|redirects=3 : Maximum number of redirects to follow per URL. Use 0 to not follow redirects at all and report the 3xx response itself.}';
-
-    public static string $outputOption = '{--o|output= : Write the full per-request results to a CSV file. Without a value, or with a relative path, the file is written to your home directory; absolute paths are used as given. An existing file at that location is overwritten.}';
+    /** The option definitions shared by every crawl command. */
+    public static string $sharedOptions = '{--basic-auth= : user:password (user must not contain a colon)}'
+    .'{--c|concurrency=1 : Number of URLs to crawl in parallel per wave (1 = sequential, the default)}'
+    .'{--p|parallel= : Alias of --concurrency.}'
+    .'{--r|redirects=3 : Maximum number of redirects to follow per URL. Use 0 to not follow redirects at all and report the 3xx response itself.}'
+    .'{--o|output= : Write the full per-request results to a CSV file. Without a value, or with a relative path, the file is written to your home directory; absolute paths are used as given. An existing file at that location is overwritten.}';
 
     /**
      * The header Guzzle fills with the URLs a request was redirected to.
@@ -42,14 +36,6 @@ abstract class CrawlCommand extends Command
      * @var array{username: string, password: string}|array{}
      */
     protected array $basicAuth = [];
-
-    /**
-     * Every option that all crawl commands take, ready to append to a signature.
-     */
-    public static function sharedOptions(): string
-    {
-        return self::$concurrencyOption.self::$basicAuthOption.self::$redirectsOption.self::$outputOption;
-    }
 
     /**
      * The headline printed above the summary, e.g. "Crawling completed for …".

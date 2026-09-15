@@ -19,7 +19,7 @@ class CrawlCsv extends CrawlCommand
             .'{--enclosure=" : The enclosure character used in the CSV file.}'
             .'{--escape=\\ : The escape character used in the CSV file.}'
             .'{--y|yes : Skip the confirmation prompt.}'
-            .self::sharedOptions();
+            .self::$sharedOptions;
 
         parent::__construct();
     }

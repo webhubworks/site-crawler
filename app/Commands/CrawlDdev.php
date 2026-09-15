@@ -20,7 +20,9 @@ class CrawlDdev extends Command
          * This command is a thin wrapper around crawl:url, so it takes the exact same
          * options and forwards them verbatim.
          */
-        $this->signature = 'crawl:ddev '.CrawlUrl::$options.CrawlCommand::sharedOptions();
+        $this->signature = 'crawl:ddev '
+            .CrawlUrl::$options
+            .CrawlCommand::$sharedOptions;
 
         parent::__construct();
     }

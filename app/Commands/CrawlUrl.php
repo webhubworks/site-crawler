@@ -18,17 +18,13 @@ use Spatie\Url\Url;
 
 class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
 {
-    /**
-     * The options specific to crawling a whole site, shared with crawl:ddev, which wraps
-     * this command. The options every crawl command takes live on CrawlCommand.
-     */
-    public static string $options = '{--l|limit=250 : Only crawl a certain amount of URLs}'
+    public static string $options = '{--l|limit= : Only crawl a certain amount of URLs}'
         .'{--e|exclude= : Exclude URLs from crawling that contain the following paths, separate by comma}'
         .'{--m|modes= : Comma-separated list of modes to enable (e.g. cache)}';
 
     protected $description = 'Crawls an entire website starting on {url} until it reaches {limit} excluding URLs that contain any of these strings: {exclude}.';
 
-    private int $requestLimit;
+    private int|float $requestLimit;
 
     /**
      * @var array<int, array{url: Url, foundOn: string|null}>
@@ -48,7 +44,7 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
 
     public function __construct()
     {
-        $this->signature = 'crawl:url {url} '.self::$options.self::sharedOptions();
+        $this->signature = 'crawl:url {url} '.self::$options.self::$sharedOptions;
 
         parent::__construct();
 
@@ -63,7 +59,7 @@ class CrawlUrl extends CrawlCommand implements PromptsForMissingInput
 
         $this->startUrl = Url::fromString($this->argument('url'));
 
-        $this->requestLimit = (int) $this->option('limit');
+        $this->requestLimit = ((int) $this->option('limit')) ?: INF;
 
         $this->queue[] = ['url' => $this->startUrl, 'foundOn' => null];
 
