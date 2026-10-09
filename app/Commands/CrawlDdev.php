@@ -16,10 +16,6 @@ class CrawlDdev extends Command
 
     public function __construct()
     {
-        /**
-         * This command is a thin wrapper around crawl:url, so it takes the exact same
-         * options and forwards them verbatim.
-         */
         $this->signature = 'crawl:ddev '
             .CrawlUrl::$options
             .CrawlCommand::$sharedOptions;
@@ -32,16 +28,27 @@ class CrawlDdev extends Command
      */
     public function handle(): int
     {
-        $url = $this->getDdevUrl();
+        $forwardableOptions = $this->forwardableOptions();
+        $ddevHostnames = $this->parseDdevHostnames();
+        $returnCodes = [];
 
-        if (! $url) {
+        if (blank($ddevHostnames)) {
             return self::FAILURE;
         }
 
-        return $this->call('crawl:url', [
-            'url' => $url,
-            ...$this->forwardableOptions(),
-        ]);
+        $this->info("Crawling the following DDEV hostnames: \n- ".implode("\n- ", $ddevHostnames));
+        $this->newLine();
+
+        foreach ($ddevHostnames as $hostname) {
+            $returnCodes[] = $this->call('crawl:url', [
+                'url' => 'https://'.$hostname,
+                ...$forwardableOptions,
+            ]);
+        }
+
+        return array_any($returnCodes, fn ($code) => $code === self::FAILURE)
+            ? self::FAILURE
+            : self::SUCCESS;
     }
 
     /**
@@ -68,34 +75,46 @@ class CrawlDdev extends Command
         return $options;
     }
 
-    private function getDdevUrl(): string|bool
+    /**
+     * @return string[]
+     */
+    private function parseDdevHostnames(): array
     {
         $cwd = getcwd();
+        $ddcfyPath = $cwd.DIRECTORY_SEPARATOR.'.ddev'.DIRECTORY_SEPARATOR.'.ddev-docker-compose-full.yaml';
 
         if (! $cwd) {
             $this->error('Failed to determine the current working directory.');
 
-            return false;
+            return [];
         }
 
-        try {
-            $ddevDockerComposeFullContent = file_get_contents($cwd.DIRECTORY_SEPARATOR.'.ddev'.DIRECTORY_SEPARATOR.'.ddev-docker-compose-full.yaml');
+        if (! is_dir($cwd.DIRECTORY_SEPARATOR.'.ddev')) {
+            $this->error("Failed to find a '.ddev' directory in the current working directory.");
 
-        } catch (\Throwable $e) {
-            $this->error('Failed to find or open the file ".ddev/.ddev-docker-compose-full.yaml" from the current working directory.');
-
-            return false;
+            return [];
         }
 
-        $matches = [];
-        preg_match('/^\s*DDEV_PRIMARY_URL: (.+)$/m', $ddevDockerComposeFullContent, $matches);
+        if (! is_file($ddcfyPath)) {
+            $this->error("Failed to find the expected file at '$ddcfyPath'");
 
-        if (empty($matches[1])) {
-            $this->error('Failed to find a DDEV_PRIMARY_URL inside your ".ddev/.ddev-docker-compose-full.yaml".');
-
-            return false;
+            return [];
         }
 
-        return $matches[1];
+        $ddevDockerComposeFullYaml = yaml_parse_file($ddcfyPath);
+
+        if (! $ddevDockerComposeFullYaml) {
+            $this->error("Failed to parse the yaml file at '$ddcfyPath'");
+
+            return [];
+        }
+
+        if (! isset($ddevDockerComposeFullYaml['services']['web']['environment']['DDEV_HOSTNAME'])) {
+            $this->error("Failed to find the expected environment variable 'services.web.environment.DDEV_HOSTNAME' in the yaml file at '$ddcfyPath'");
+
+            return [];
+        }
+
+        return explode(',', $ddevDockerComposeFullYaml['services']['web']['environment']['DDEV_HOSTNAME']);
     }
 }

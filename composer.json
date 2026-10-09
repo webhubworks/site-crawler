@@ -18,6 +18,7 @@
     "require": {
         "php": "^8.5",
         "ext-dom": "*",
+        "ext-yaml": "*",
         "illuminate/http": "^v12.0.0",
         "illuminate/validation": "^12.0.0",
         "laravel-zero/framework": "^12.0.0",
